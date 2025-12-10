@@ -296,6 +296,15 @@ class NunchakuFluxDiTLoader:
         model_config.set_inference_dtype(torch.bfloat16, None)
         model_config.custom_operations = None
         model = model_config.get_model({})
-        model.diffusion_model = ComfyFluxWrapper(transformer, config=comfy_config["model_config"])
+        model.diffusion_model = ComfyFluxWrapper(
+            transformer,
+            config=comfy_config["model_config"],
+            ctx_for_copy={
+                "comfy_config": comfy_config,
+                "model_config": model_config,
+                "device": device,
+                "device_id": device_id
+            }
+        )
         model = comfy.model_patcher.ModelPatcher(model, device, device_id)
         return (model,)
