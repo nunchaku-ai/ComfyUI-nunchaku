@@ -3,7 +3,6 @@ This module provides the :class:`NunchakuFluxLoraLoader` node
 for applying LoRA weights to Nunchaku FLUX models within ComfyUI.
 """
 
-import copy
 import logging
 import os
 
@@ -112,16 +111,52 @@ class NunchakuFluxLoraLoader:
         model_wrapper = model.model.diffusion_model
         assert isinstance(model_wrapper, ComfyFluxWrapper)
 
+        # Store clean base model only if input model has no LoRAs (first node in chain)
+        # This ensures we always have a clean base without any LoRA applied
+        if not hasattr(model, 'nunchaku_base_model'):
+            if len(model_wrapper.loras) == 0:
+                # This is the first LoRA node - save clean base model
+                transformer = model_wrapper.model
+                model_wrapper.model = None
+                model.nunchaku_base_model = model.clone()
+                model_wrapper.model = transformer
+            else:
+                # Input model already has LoRAs - need to find the base
+                # For now, clone current model as base (will be improved)
+                transformer = model_wrapper.model
+                model_wrapper.model = None
+                model.nunchaku_base_model = model.clone()
+                model_wrapper.model = transformer
+
+        # Always start from clean base model and rebuild all LoRAs from chain
+        # This prevents accumulation of LoRA weights in transformer
         transformer = model_wrapper.model
-        model_wrapper.model = None
-        ret_model = copy.deepcopy(model)  # copy everything except the model
+        base_model_wrapper = model.nunchaku_base_model.model.diffusion_model
+        base_model_wrapper.model = None
+        ret_model = model.nunchaku_base_model.clone()
         ret_model_wrapper = ret_model.model.diffusion_model
         assert isinstance(ret_model_wrapper, ComfyFluxWrapper)
-
-        model_wrapper.model = transformer
+        base_model_wrapper.model = transformer
         ret_model_wrapper.model = transformer
 
+        # CRITICAL: Reset LoRA state in transformer to ensure clean state
+        if hasattr(ret_model_wrapper.model, 'reset_lora'):
+            ret_model_wrapper.model.reset_lora()
+        if hasattr(ret_model_wrapper.model, 'comfy_lora_meta_list'):
+            ret_model_wrapper.model.comfy_lora_meta_list = []
+        if hasattr(ret_model_wrapper.model, 'comfy_lora_sd_list'):
+            ret_model_wrapper.model.comfy_lora_sd_list = []
+
+        # Collect all LoRAs from chain (from input model)
+        ret_model_wrapper.loras = list(model_wrapper.loras)
+
+        # Apply new LoRA - remove all existing entries with same path, then add new one
         lora_path = get_full_path_or_raise("loras", lora_name)
+        
+        # Remove all existing LoRAs with the same path to prevent duplicates
+        ret_model_wrapper.loras = [(path, strength) for path, strength in ret_model_wrapper.loras if path != lora_path]
+        
+        # Add new LoRA with current strength
         ret_model_wrapper.loras.append((lora_path, lora_strength))
 
         sd = to_diffusers(lora_path)
@@ -257,20 +292,37 @@ class NunchakuFluxLoraStack:
         model_wrapper = model.model.diffusion_model
         assert isinstance(model_wrapper, ComfyFluxWrapper)
 
+        # Store clean base model on first use to prevent LoRA leakage
+        if not hasattr(model, 'nunchaku_base_model'):
+            transformer = model_wrapper.model
+            model_wrapper.model = None
+            model.nunchaku_base_model = model.clone()
+            model_wrapper.model = transformer
+
+        # Use transformer from current model (it's not modified by LoRA)
         transformer = model_wrapper.model
-        model_wrapper.model = None
-        ret_model = copy.deepcopy(model)  # copy everything except the model
+        base_model_wrapper = model.nunchaku_base_model.model.diffusion_model
+        base_model_wrapper.model = None
+        ret_model = model.nunchaku_base_model.clone()
         ret_model_wrapper = ret_model.model.diffusion_model
         assert isinstance(ret_model_wrapper, ComfyFluxWrapper)
 
-        model_wrapper.model = transformer
+        base_model_wrapper.model = transformer
         ret_model_wrapper.model = transformer
 
-        # Clear existing LoRA list
-        ret_model_wrapper.loras = []
+        # CRITICAL: Reset LoRA state in transformer to prevent accumulation
+        if hasattr(ret_model_wrapper.model, 'reset_lora'):
+            ret_model_wrapper.model.reset_lora()
+        if hasattr(ret_model_wrapper.model, 'comfy_lora_meta_list'):
+            ret_model_wrapper.model.comfy_lora_meta_list = []
+        if hasattr(ret_model_wrapper.model, 'comfy_lora_sd_list'):
+            ret_model_wrapper.model.comfy_lora_sd_list = []
 
         # Track the maximum input channels needed
         max_in_channels = ret_model.model.model_config.unet_config["in_channels"]
+
+        # Всегда разрываем ссылку на список loras, чтобы не копить состояние между перезапусками
+        ret_model_wrapper.loras = []
 
         # Add all LoRAs
         for lora_name, lora_strength in loras_to_apply:
