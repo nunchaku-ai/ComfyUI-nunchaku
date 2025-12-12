@@ -139,7 +139,7 @@ class NunchakuFluxPuLIDApplyV2:
         transformer = model_wrapper.model
 
         model_wrapper.model = None
-        ret_model = copy.deepcopy(model)  # copy everything except the model
+        ret_model = model.clone()  # copy everything except the model, Replace deepcopy with clone and adapt to ModelPatcher
         ret_model_wrapper = ret_model.model.diffusion_model
         assert isinstance(ret_model_wrapper, ComfyFluxWrapper)
         ret_model_wrapper.model = transformer
