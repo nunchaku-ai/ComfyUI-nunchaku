@@ -1,48 +1,48 @@
 """
 This module provides the :class:`NunchakuZImageDiTLoader` class for loading Nunchaku Z-Image models.
 """
+
 import json
 
-import logging
 import comfy.utils
 import torch
 from comfy import model_detection, model_management
 from comfy.model_patcher import ModelPatcher
 
+from nunchaku.models.transformers.utils import patch_scale_key
 from nunchaku.utils import check_hardware_compatibility, get_precision_from_quantization_config
 
 from ...model_configs.zimage import NunchakuZImage
-
 from ..utils import get_filename_list, get_full_path_or_raise
 
 
 def _patch_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     """
-    Patch the state dict. 
-    
-    Convert the keys from diffusers style to Comfy-Org style keys. 
+    Patch the state dict.
+
+    Convert the keys from diffusers style to Comfy-Org style keys.
     See https://huggingface.co/Comfy-Org/z_image_turbo/blob/main/split_files/diffusion_models/z_image_turbo_bf16.safetensors
 
     Parameters
     ----------
-    state_dict (dict[str, torch.Tensor]): 
+    state_dict (dict[str, torch.Tensor]):
         the state dict loaded from diffuser style safetensors checkpoint file.
 
     Returns
     -------
-    dict[str, torch.Tensor]: 
+    dict[str, torch.Tensor]:
         the patched state dict which follows Comfy-Org style keys.
     """
     patched_state_dict = {}
-    quant_sub_keys = ["wscales", "smooth_factor_orig", "smooth_factor", "proj_down", "proj_up"]
-    
+    quant_sub_keys = ["wscales", "wcscales", "wtscale", "smooth_factor_orig", "smooth_factor", "proj_down", "proj_up"]
+
     for key, value in state_dict.items():
         # region: attention
         ## case for quantized attention qkv
-        if "attention.to_qkv" in key:    
+        if "attention.to_qkv" in key:
             patched_state_dict[key.replace("to_qkv", "qkv")] = value
         ## case for non-quantized attetion qkv
-        elif "attention.to_q" in key:  
+        elif "attention.to_q" in key:
             q_weight = state_dict[key]
             k_weight = state_dict[key.replace("to_q", "to_k")]
             v_weight = state_dict[key.replace("to_q", "to_v")]
@@ -50,27 +50,29 @@ def _patch_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Te
         elif "attention.to_k" in key or "attention.to_v" in key:
             continue
         ## case for attention out
-        elif "attention.to_out" in key:  
+        elif "attention.to_out" in key:
             patched_state_dict[key.replace("to_out.0", "out")] = value
         # end of region
-        # region: feed forward 
+        # region: feed forward
         ## case for quantized feed forward
-        elif "feed_forward.net.0.proj.qweight" in key:  
+        elif "feed_forward.net.0.proj.qweight" in key:
             patched_state_dict[key.replace("net.0.proj", "w13")] = value
             for subkey in quant_sub_keys:
                 quant_param_key = key.replace("qweight", subkey)
-                patched_state_dict[quant_param_key.replace("net.0.proj", "w13")] = state_dict[quant_param_key]
+                if quant_param_key in state_dict:
+                    patched_state_dict[quant_param_key.replace("net.0.proj", "w13")] = state_dict[quant_param_key]
         elif any("feed_forward.net.0.proj." + subkey in key for subkey in quant_sub_keys):
             continue
         elif "feed_forward.net.2.qweight" in key:
             patched_state_dict[key.replace("net.2", "w2")] = value
             for subkey in quant_sub_keys:
                 quant_param_key = key.replace("qweight", subkey)
-                patched_state_dict[quant_param_key.replace("net.2", "w2")] = state_dict[quant_param_key]
+                if quant_param_key in state_dict:
+                    patched_state_dict[quant_param_key.replace("net.2", "w2")] = state_dict[quant_param_key]
         elif any("feed_forward.net.2." + subkey in key for subkey in quant_sub_keys):
             continue
         ## case for non-quantized feed forward
-        elif "feed_forward.net.0.proj.weight" in key:  
+        elif "feed_forward.net.0.proj.weight" in key:
             w3, w1 = torch.chunk(value, chunks=2, dim=0)
             w2 = state_dict[key.replace("0.proj", "2")]
             patched_state_dict[key.replace("net.0.proj", "w1")] = w1
@@ -91,7 +93,7 @@ def _patch_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Te
         else:
             patched_state_dict[key] = value
         # end of region
-    
+
     return patched_state_dict
 
 
@@ -130,7 +132,7 @@ def _load(sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}):
     check_hardware_compatibility(quantization_config, load_device)
 
     new_sd = sd
-    
+
     model_config = NunchakuZImage(rank=rank, precision=precision, skip_refiners=skip_refiners)
 
     unet_weight_dtype = list(model_config.supported_inference_dtypes)
@@ -144,11 +146,14 @@ def _load(sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}):
     manual_cast_dtype = model_management.unet_manual_cast(
         unet_dtype, load_device, model_config.supported_inference_dtypes
     )
-    
+
     patched_sd = _patch_state_dict(new_sd)
-    
+
     model_config.set_inference_dtype(unet_dtype, manual_cast_dtype)
     model = model_config.get_model(patched_sd, "", load_device)
+
+    patch_scale_key(model.diffusion_model, patched_sd)
+
     model.load_model_weights(patched_sd, "")
     return ModelPatcher(model, load_device=load_device, offload_device=offload_device)
 
