@@ -16,7 +16,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 from comfy.ldm.lumina.model import FeedForward, JointAttention, JointTransformerBlock, NextDiT, clamp_fp16
 
-
 from nunchaku.models.linear import SVDQW4A4Linear
 
 
