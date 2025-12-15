@@ -63,3 +63,26 @@ A node for loading Nunchaku Qwen-Image models.
 .. seealso::
 
     See API reference: :class:`~comfyui_nunchaku.nodes.models.qwenimage.NunchakuQwenImageDiTLoader`.
+
+.. _nunchaku-z-image-dit-loader:
+
+Nunchaku Z-Image DiT Loader
+---------------------------
+
+.. image:: https://huggingface.co/datasets/nunchaku-tech/cdn/resolve/main/ComfyUI-nunchaku/workflows/NunchakuZImageDiTLoader-v1.1.0.png
+    :alt: NunchakuZImageDiTLoader
+
+A node for loading Nunchaku Z-Image models.
+
+**Inputs:**
+
+- **model_name**: The filename of the Nunchaku Z-Image model to load. You can download the model from `HuggingFace <hf_nunchaku_>`_ or `ModelScope <ms_nunchaku_>`_.
+
+
+**Outputs:**
+
+- **model**: The loaded diffusion model.
+
+.. seealso::
+
+    See API reference: :class:`~comfyui_nunchaku.nodes.models.zimage.NunchakuZImageDiTLoader`.

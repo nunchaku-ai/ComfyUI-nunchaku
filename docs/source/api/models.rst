@@ -5,3 +5,4 @@ models
    :maxdepth: 4
 
    models.qwenimage
+   models.zimage
