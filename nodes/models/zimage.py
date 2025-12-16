@@ -136,8 +136,6 @@ def _load(sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}):
     model_config = NunchakuZImage(rank=rank, precision=precision, skip_refiners=skip_refiners)
 
     unet_weight_dtype = list(model_config.supported_inference_dtypes)
-    if model_config.scaled_fp8 is not None:
-        weight_dtype = None
 
     unet_dtype = model_management.unet_dtype(
         model_params=parameters, supported_dtypes=unet_weight_dtype, weight_dtype=weight_dtype
@@ -150,7 +148,7 @@ def _load(sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}):
     patched_sd = _patch_state_dict(new_sd)
 
     model_config.set_inference_dtype(unet_dtype, manual_cast_dtype)
-    model = model_config.get_model(patched_sd, "", load_device)
+    model = model_config.get_model(patched_sd, "")
 
     patch_scale_key(model.diffusion_model, patched_sd)
 
