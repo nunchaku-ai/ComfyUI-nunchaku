@@ -251,6 +251,9 @@ class NunchakuFluxDiTLoader:
                 comfy.model_management.soft_empty_cache()
                 comfy.model_management.free_memory(model_size, device)
 
+            print(
+                f">>>> from_pretrained params: model_path={model_path}, device={device}, cpu_offload={cpu_offload_enabled}, data_type={data_type}"
+            )
             self.transformer, self.metadata = NunchakuFluxTransformer2dModel.from_pretrained(
                 model_path,
                 offload=cpu_offload_enabled,
@@ -287,6 +290,11 @@ class NunchakuFluxDiTLoader:
             comfy_config_str = self.metadata.get("comfy_config", None)
             comfy_config = json.loads(comfy_config_str)
         model_class_name = comfy_config["model_class"]
+
+        model_config = comfy_config["model_config"]
+        if "disable_unet_model_creation" not in model_config:
+            model_config["disable_unet_model_creation"] = True
+
         if model_class_name == "FluxSchnell":
             model_class = FluxSchnell
         else:
