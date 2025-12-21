@@ -7,7 +7,6 @@ with ComfyUI, enabling face restoration and enhancement using PuLID and related 
     Adapted from: https://github.com/lldacing/ComfyUI_PuLID_Flux_ll
 """
 
-import copy
 import logging
 import os
 from functools import partial

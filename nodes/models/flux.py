@@ -303,8 +303,8 @@ class NunchakuFluxDiTLoader:
                 "comfy_config": comfy_config,
                 "model_config": model_config,
                 "device": device,
-                "device_id": device_id
-            }
+                "device_id": device_id,
+            },
         )
         model = comfy.model_patcher.ModelPatcher(model, device, device_id)
         return (model,)

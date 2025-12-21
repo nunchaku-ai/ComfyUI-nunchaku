@@ -65,7 +65,7 @@ class ComfyFluxWrapper(nn.Module):
         pulid_pipeline=None,
         customized_forward: Callable = None,
         forward_kwargs: dict | None = {},
-        ctx_for_copy: dict = {}
+        ctx_for_copy: dict = {},
     ):
         super(ComfyFluxWrapper, self).__init__()
         self.model = model
@@ -334,14 +334,14 @@ class ComfyFluxWrapper(nn.Module):
 def copy_with_ctx(model_wrapper: ComfyFluxWrapper) -> Tuple[ComfyFluxWrapper, ModelPatcher]:
     """
     Duplicates a ComfyFluxWrapper object with it's initialization context such as comfy_config, model_config, device and device_id.
-    
+
     Also create a ModelPatcher object that holds the model_base object created by the model_config.
-    
+
     Parameters
     ----------
     model_wrapper : ComfyFluxWrapper
         the object to be copied.
-        
+
     Returns
     -------
     tuple[ComfyFluxWrapper, ModelPatcher]
@@ -355,15 +355,10 @@ def copy_with_ctx(model_wrapper: ComfyFluxWrapper) -> Tuple[ComfyFluxWrapper, Mo
             "comfy_config": ctx_for_copy["comfy_config"],
             "model_config": ctx_for_copy["model_config"],
             "device": ctx_for_copy["device"],
-            "device_id": ctx_for_copy["device_id"]
-        }
+            "device_id": ctx_for_copy["device_id"],
+        },
     )
     model_base = ctx_for_copy["model_config"].get_model({})
     model_base.diffusion_model = ret_model_wrapper
-    ret_model = ModelPatcher(
-        model_base, 
-        ctx_for_copy["device"],
-        ctx_for_copy["device_id"]
-    )
+    ret_model = ModelPatcher(model_base, ctx_for_copy["device"], ctx_for_copy["device_id"])
     return ret_model_wrapper, ret_model
-
