@@ -7,12 +7,12 @@ import json
 import comfy.utils
 import torch
 from comfy import model_detection, model_management
-from comfy.model_patcher import ModelPatcher
 
 from nunchaku.models.transformers.utils import patch_scale_key
 from nunchaku.utils import check_hardware_compatibility, get_precision_from_quantization_config
 
 from ...model_configs.zimage import NunchakuZImage
+from ...model_patcher.zimage import ZImageModelPatcher
 from ..utils import get_filename_list, get_full_path_or_raise
 
 
@@ -153,7 +153,7 @@ def _load(sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}):
     patch_scale_key(model.diffusion_model, patched_sd)
 
     model.load_model_weights(patched_sd, "")
-    return ModelPatcher(model, load_device=load_device, offload_device=offload_device)
+    return ZImageModelPatcher(model, load_device=load_device, offload_device=offload_device)
 
 
 class NunchakuZImageDiTLoader:
