@@ -3,7 +3,6 @@ This module provides a wrapper for ComfyUI's Z-Image model configuration.
 """
 
 import torch
-
 from comfy.model_base import Lumina2
 from comfy.supported_models import ZImage as ZImageModelConfig
 
@@ -14,6 +13,7 @@ class NunchakuZImage(ZImageModelConfig):
     """
     Nunchaku Z-Image model_config.
     """
+
     _DIT_CONFIG_ = {
         "image_model": "lumina2",
         "patch_size": 2,
@@ -30,9 +30,9 @@ class NunchakuZImage(ZImageModelConfig):
         "ffn_dim_multiplier": (8.0 / 3.0),
         "z_image_modulation": True,
         "time_scale": 1000.0,
-        "pad_tokens_multiple": 32
+        "pad_tokens_multiple": 32,
     }
-    
+
     def __init__(self, rank: int = 32, precision: str = "int4", skip_refiners: bool = False):
         super().__init__(unet_config=self._DIT_CONFIG_)
         self.rank = rank
