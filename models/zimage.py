@@ -1,3 +1,24 @@
+"""
+This module patches the original Z-Image transformer model by injecting into Nunchaku optimized attention and feed forward submodules.
+
+Note
+----
+In Comfy-UI standard process, Z-Image transformer model object is created by class `comfy.model_base.Lumina2`,
+and the type of the created transformer model is `comfy.ldm.lumina.model.NextDiT`.
+
+See Also
+--------
+comfy.model_detection#model_config_from_unet
+comfy.model_detection#detect_unet_config
+comfy.model_detection#model_config_from_unet_config
+comfy.supported_models#models
+comfy.supported_models#ZImage
+comfy.supported_models#Lumina2
+comfy.model_base#Lumina2
+comfy.model_base#BaseModel#__init__
+comfy.ldm.lumina.model#NextDiT
+"""
+
 from typing import List
 
 import torch

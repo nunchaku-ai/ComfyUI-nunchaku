@@ -1,5 +1,25 @@
 """
 This module provides a wrapper for ComfyUI's Z-Image model configuration.
+
+Note
+----
+Comfy-UI's general UNetLoader detects model config (which is a dict) by inspecting checkpoint file
+state dict keys in method `comfy.model_detection#model_config_from_unet`.
+
+Since in NunchakuZImageDiTLoader we know the model configuration should be aligned with Z-Image,
+we can skip the inspecting process.
+
+See Also
+--------
+comfy.model_detection#model_config_from_unet
+comfy.model_detection#detect_unet_config
+comfy.model_detection#model_config_from_unet_config
+comfy.supported_models#models
+comfy.supported_models#ZImage
+comfy.supported_models#Lumina2
+comfy.model_base#Lumina2
+comfy.model_base#BaseModel#__init__
+comfy.ldm.lumina.model#NextDiT
 """
 
 import torch
@@ -15,6 +35,7 @@ class NunchakuZImage(ZImageModelConfig):
     """
 
     _DIT_CONFIG_ = {
+        # This dict is the same as the result of execution of `comfy.model_detection#detect_unet_config` method for Z-Image
         "image_model": "lumina2",
         "patch_size": 2,
         "in_channels": 16,
