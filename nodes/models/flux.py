@@ -287,6 +287,11 @@ class NunchakuFluxDiTLoader:
             comfy_config_str = self.metadata.get("comfy_config", None)
             comfy_config = json.loads(comfy_config_str)
         model_class_name = comfy_config["model_class"]
+
+        model_config = comfy_config["model_config"]
+        if "disable_unet_model_creation" not in model_config:
+            model_config["disable_unet_model_creation"] = True
+
         if model_class_name == "FluxSchnell":
             model_class = FluxSchnell
         else:
@@ -296,6 +301,15 @@ class NunchakuFluxDiTLoader:
         model_config.set_inference_dtype(torch.bfloat16, None)
         model_config.custom_operations = None
         model = model_config.get_model({})
-        model.diffusion_model = ComfyFluxWrapper(transformer, config=comfy_config["model_config"])
+        model.diffusion_model = ComfyFluxWrapper(
+            transformer,
+            config=comfy_config["model_config"],
+            ctx_for_copy={
+                "comfy_config": comfy_config,
+                "model_config": model_config,
+                "device": device,
+                "device_id": device_id,
+            },
+        )
         model = comfy.model_patcher.ModelPatcher(model, device, device_id)
         return (model,)

@@ -7,7 +7,6 @@ with ComfyUI, enabling face restoration and enhancement using PuLID and related 
     Adapted from: https://github.com/lldacing/ComfyUI_PuLID_Flux_ll
 """
 
-import copy
 import logging
 import os
 from functools import partial
@@ -20,7 +19,7 @@ import torch
 from nunchaku.models.pulid.pulid_forward import pulid_forward
 from nunchaku.pipeline.pipeline_flux_pulid import PuLIDPipeline
 
-from ...wrappers.flux import ComfyFluxWrapper
+from ...wrappers.flux import ComfyFluxWrapper, copy_with_ctx
 from ..utils import folder_paths, get_filename_list, get_full_path_or_raise
 from .utils import set_extra_config_model_path
 
@@ -136,14 +135,8 @@ class NunchakuFluxPuLIDApplyV2:
 
         model_wrapper = model.model.diffusion_model
         assert isinstance(model_wrapper, ComfyFluxWrapper)
-        transformer = model_wrapper.model
 
-        model_wrapper.model = None
-        ret_model = copy.deepcopy(model)  # copy everything except the model
-        ret_model_wrapper = ret_model.model.diffusion_model
-        assert isinstance(ret_model_wrapper, ComfyFluxWrapper)
-        ret_model_wrapper.model = transformer
-        model_wrapper.model = transformer
+        ret_model_wrapper, ret_model = copy_with_ctx(model_wrapper)
 
         ret_model_wrapper.pulid_pipeline = pulid_pipline
         ret_model_wrapper.customized_forward = partial(
