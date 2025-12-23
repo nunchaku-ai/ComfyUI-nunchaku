@@ -3,24 +3,10 @@ This module patches the original Z-Image transformer model by injecting into Nun
 
 Note
 ----
-In Comfy-UI standard process, Z-Image transformer model object is created by class `comfy.model_base.Lumina2`,
-and the type of the created transformer model is `comfy.ldm.lumina.model.NextDiT`.
+The injected transformer model is `comfy.ldm.lumina.model.NextDiT` in ComfyUI repository. Codes are adapted from:
+ - https://github.com/comfyanonymous/ComfyUI/blob/master/comfy/model_base.py#Lumina2
+ - https://github.com/comfyanonymous/ComfyUI/blob/master/comfy/ldm/lumina/model.py#NextDiT
 
-See Also
---------
- - https://github.com/comfyanonymous/ComfyUI/blob/master/comfy/model_detection.py
-    comfy.model_detection#model_config_from_unet
-    comfy.model_detection#detect_unet_config
-    comfy.model_detection#model_config_from_unet_config
- - https://github.com/comfyanonymous/ComfyUI/blob/master/comfy/supported_models.py
-    comfy.supported_models#models
-    comfy.supported_models#ZImage
-    comfy.supported_models#Lumina2
- - https://github.com/comfyanonymous/ComfyUI/blob/master/comfy/model_base.py
-    comfy.model_base#Lumina2
-    comfy.model_base#BaseModel#__init__
- - https://github.com/comfyanonymous/ComfyUI/blob/master/comfy/ldm/lumina/model.py
-    comfy.ldm.lumina.model#NextDiT
 """
 
 from typing import List
