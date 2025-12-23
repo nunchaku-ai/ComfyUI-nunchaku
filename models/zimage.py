@@ -8,15 +8,19 @@ and the type of the created transformer model is `comfy.ldm.lumina.model.NextDiT
 
 See Also
 --------
-comfy.model_detection#model_config_from_unet
-comfy.model_detection#detect_unet_config
-comfy.model_detection#model_config_from_unet_config
-comfy.supported_models#models
-comfy.supported_models#ZImage
-comfy.supported_models#Lumina2
-comfy.model_base#Lumina2
-comfy.model_base#BaseModel#__init__
-comfy.ldm.lumina.model#NextDiT
+ - https://github.com/comfyanonymous/ComfyUI/blob/master/comfy/model_detection.py
+    comfy.model_detection#model_config_from_unet
+    comfy.model_detection#detect_unet_config
+    comfy.model_detection#model_config_from_unet_config
+ - https://github.com/comfyanonymous/ComfyUI/blob/master/comfy/supported_models.py
+    comfy.supported_models#models
+    comfy.supported_models#ZImage
+    comfy.supported_models#Lumina2
+ - https://github.com/comfyanonymous/ComfyUI/blob/master/comfy/model_base.py
+    comfy.model_base#Lumina2
+    comfy.model_base#BaseModel#__init__
+ - https://github.com/comfyanonymous/ComfyUI/blob/master/comfy/ldm/lumina/model.py
+    comfy.ldm.lumina.model#NextDiT
 """
 
 from typing import List
