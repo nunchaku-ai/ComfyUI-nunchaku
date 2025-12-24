@@ -15,7 +15,7 @@ Text-to-image workflow using the Nunchaku Z-Image-Turbo model.
 **Links:**
 
 - Workflow: :download:`nunchaku-z-image-turbo.json <https://github.com/nunchaku-tech/ComfyUI-nunchaku/blob/main/example_workflows/nunchaku-z-image-turbo.json>`
-- Nunchak Z-Image-Turbo: :download:`Hugging Face <https://huggingface.co/nunchaku-tech/nunchaku-z-image-turbo>` or :download:`ModelScope <https://modelscope.cn/models/nunchaku-tech/nunchaku-z-image-turbo>`
+- Nunchaku Z-Image-Turbo: :download:`Hugging Face <https://huggingface.co/nunchaku-tech/nunchaku-z-image-turbo>` or :download:`ModelScope <https://modelscope.cn/models/nunchaku-tech/nunchaku-z-image-turbo>`
   (Place in ``models/diffusion_models``)
 
 .. seealso::
