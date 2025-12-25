@@ -138,8 +138,10 @@ class NunchakuFluxPuLIDApplyV2:
         assert isinstance(model_wrapper, ComfyFluxWrapper)
         transformer = model_wrapper.model
 
+        # Use model.clone() instead of copy.deepcopy() to avoid serialization issues
+        # clone() shares the underlying model but creates a new ModelPatcher instance
         model_wrapper.model = None
-        ret_model = copy.deepcopy(model)  # copy everything except the model
+        ret_model = model.clone()
         ret_model_wrapper = ret_model.model.diffusion_model
         assert isinstance(ret_model_wrapper, ComfyFluxWrapper)
         ret_model_wrapper.model = transformer

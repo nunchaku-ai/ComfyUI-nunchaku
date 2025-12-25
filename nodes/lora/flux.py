@@ -3,7 +3,6 @@ This module provides the :class:`NunchakuFluxLoraLoader` node
 for applying LoRA weights to Nunchaku FLUX models within ComfyUI.
 """
 
-import copy
 import logging
 import os
 
@@ -112,17 +111,51 @@ class NunchakuFluxLoraLoader:
         model_wrapper = model.model.diffusion_model
         assert isinstance(model_wrapper, ComfyFluxWrapper)
 
+        # Store clean base model only if input model has no LoRAs (first node in chain)
+        # This ensures we always have a clean base without any LoRA applied
+        if not hasattr(model, 'nunchaku_base_model'):
+            transformer = model_wrapper.model
+            model_wrapper.model = None
+            model.nunchaku_base_model = model.clone()
+            model_wrapper.model = transformer
+
+        # Always start from clean base model and rebuild all LoRAs from chain
+        # This prevents accumulation of LoRA weights in transformer
         transformer = model_wrapper.model
-        model_wrapper.model = None
-        ret_model = copy.deepcopy(model)  # copy everything except the model
+        base_model_wrapper = model.nunchaku_base_model.model.diffusion_model
+        base_model_wrapper.model = None
+        ret_model = model.nunchaku_base_model.clone()
         ret_model_wrapper = ret_model.model.diffusion_model
         assert isinstance(ret_model_wrapper, ComfyFluxWrapper)
-
-        model_wrapper.model = transformer
+        base_model_wrapper.model = transformer
         ret_model_wrapper.model = transformer
 
+        # Reset LoRA state in transformer to ensure clean state
+        if hasattr(ret_model_wrapper.model, 'reset_lora'):
+            ret_model_wrapper.model.reset_lora()
+        if hasattr(ret_model_wrapper.model, 'comfy_lora_meta_list'):
+            ret_model_wrapper.model.comfy_lora_meta_list = []
+        if hasattr(ret_model_wrapper.model, 'comfy_lora_sd_list'):
+            ret_model_wrapper.model.comfy_lora_sd_list = []
+
+        # Use nunchaku_parent_loras to get LoRAs from upstream nodes
+        # This prevents LoRA leakage when downstream node is re-executed but upstream is cached
+        # nunchaku_parent_loras contains LoRAs BEFORE current node, not including current node's LoRA
+        if hasattr(model, 'nunchaku_parent_loras'):
+            upstream_loras = list(model.nunchaku_parent_loras)
+        else:
+            upstream_loras = []
+
         lora_path = get_full_path_or_raise("loras", lora_name)
-        ret_model_wrapper.loras.append((lora_path, lora_strength))
+        
+        # Build new LoRA list: upstream + current
+        ret_model_wrapper.loras = upstream_loras + [(lora_path, lora_strength)]
+        
+        # Save current LoRA list as parent for next node in chain
+        ret_model.nunchaku_parent_loras = list(ret_model_wrapper.loras)
+        
+        # Propagate base model to output for downstream nodes
+        ret_model.nunchaku_base_model = model.nunchaku_base_model
 
         sd = to_diffusers(lora_path)
 
@@ -257,22 +290,46 @@ class NunchakuFluxLoraStack:
         model_wrapper = model.model.diffusion_model
         assert isinstance(model_wrapper, ComfyFluxWrapper)
 
+        # Store clean base model on first use to prevent LoRA leakage
+        if not hasattr(model, 'nunchaku_base_model'):
+            transformer = model_wrapper.model
+            model_wrapper.model = None
+            model.nunchaku_base_model = model.clone()
+            model_wrapper.model = transformer
+
+        # Use transformer from current model (it's not modified by LoRA)
         transformer = model_wrapper.model
-        model_wrapper.model = None
-        ret_model = copy.deepcopy(model)  # copy everything except the model
+        base_model_wrapper = model.nunchaku_base_model.model.diffusion_model
+        base_model_wrapper.model = None
+        ret_model = model.nunchaku_base_model.clone()
         ret_model_wrapper = ret_model.model.diffusion_model
         assert isinstance(ret_model_wrapper, ComfyFluxWrapper)
 
-        model_wrapper.model = transformer
+        base_model_wrapper.model = transformer
         ret_model_wrapper.model = transformer
 
-        # Clear existing LoRA list
-        ret_model_wrapper.loras = []
+        # Reset LoRA state in transformer to prevent accumulation
+        if hasattr(ret_model_wrapper.model, 'reset_lora'):
+            ret_model_wrapper.model.reset_lora()
+        if hasattr(ret_model_wrapper.model, 'comfy_lora_meta_list'):
+            ret_model_wrapper.model.comfy_lora_meta_list = []
+        if hasattr(ret_model_wrapper.model, 'comfy_lora_sd_list'):
+            ret_model_wrapper.model.comfy_lora_sd_list = []
 
         # Track the maximum input channels needed
         max_in_channels = ret_model.model.model_config.unet_config["in_channels"]
 
-        # Add all LoRAs
+        # Use nunchaku_parent_loras to get LoRAs from upstream nodes
+        # This prevents LoRA leakage when this node is re-executed but upstream is cached
+        if hasattr(model, 'nunchaku_parent_loras'):
+            upstream_loras = list(model.nunchaku_parent_loras)
+        else:
+            upstream_loras = []
+
+        # Build new LoRA list: upstream + all LoRAs from this node
+        ret_model_wrapper.loras = list(upstream_loras)
+
+        # Add all LoRAs from this stack
         for lora_name, lora_strength in loras_to_apply:
             lora_path = get_full_path_or_raise("loras", lora_name)
             ret_model_wrapper.loras.append((lora_path, lora_strength))
@@ -288,5 +345,11 @@ class NunchakuFluxLoraStack:
         # Update the model's input channels
         if max_in_channels > ret_model.model.model_config.unet_config["in_channels"]:
             ret_model.model.model_config.unet_config["in_channels"] = max_in_channels
+
+        # Save current LoRA list as parent for next node in chain
+        ret_model.nunchaku_parent_loras = list(ret_model_wrapper.loras)
+        
+        # Propagate base model to output for downstream nodes
+        ret_model.nunchaku_base_model = model.nunchaku_base_model
 
         return (ret_model,)

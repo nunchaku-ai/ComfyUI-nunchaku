@@ -7,9 +7,11 @@ import gc
 import json
 import logging
 import os
+from pathlib import Path
 
 import comfy.model_management
 import comfy.model_patcher
+import folder_paths
 import torch
 from comfy.supported_models import Flux, FluxSchnell
 
@@ -78,7 +80,32 @@ class NunchakuFluxDiTLoader:
         dict
             A dictionary specifying the required inputs and their descriptions for the node interface.
         """
-        safetensor_files = get_filename_list("diffusion_models")
+        prefixes = folder_paths.folder_names_and_paths["diffusion_models"][0]
+        local_folders = set()
+        for prefix in prefixes:
+            if os.path.exists(prefix) and os.path.isdir(prefix):
+                local_folders_ = os.listdir(prefix)
+                local_folders_ = [
+                    folder
+                    for folder in local_folders_
+                    if not folder.startswith(".") and os.path.isdir(os.path.join(prefix, folder))
+                ]
+                local_folders.update(local_folders_)
+        model_paths = sorted(list(local_folders))
+        safetensor_files = folder_paths.get_filename_list("diffusion_models")
+
+        # exclude the safetensors in the legacy svdquant folders
+        new_safetensor_files = []
+        for safetensor_file in safetensor_files:
+            safetensor_path = folder_paths.get_full_path_or_raise("diffusion_models", safetensor_file)
+            safetensor_path = Path(safetensor_path)
+            if not (safetensor_path.parent / "config.json").exists():
+                new_safetensor_files.append(safetensor_file)
+        safetensor_files = new_safetensor_files
+        model_paths = model_paths + safetensor_files
+
+        ###safetensor_files = get_filename_list("diffusion_models")       ###  this method can't load flux dev folder!!!
+        
 
         ngpus = torch.cuda.device_count()
 
@@ -97,7 +124,7 @@ class NunchakuFluxDiTLoader:
         return {
             "required": {
                 "model_path": (
-                    safetensor_files,
+                    model_paths,
                     {"tooltip": "The Nunchaku FLUX model."},
                 ),
                 "cache_threshold": (
@@ -207,8 +234,16 @@ class NunchakuFluxDiTLoader:
         """
         device = torch.device(f"cuda:{device_id}")
 
-        model_path = get_full_path_or_raise("diffusion_models", model_path)
-
+        ####### model_path = get_full_path_or_raise("diffusion_models", model_path)         ###  this method can't load flux dev folder!!!
+        if model_path.endswith((".sft", ".safetensors")):
+            model_path = Path(folder_paths.get_full_path_or_raise("diffusion_models", model_path))
+        else:
+            prefixes = folder_paths.folder_names_and_paths["diffusion_models"][0]
+            for prefix in prefixes:
+                prefix = Path(prefix)
+                if (prefix / model_path).exists() and (prefix / model_path).is_dir():
+                    model_path = prefix / model_path
+                    break
         # Check if the device_id is valid
         if device_id >= torch.cuda.device_count():
             raise ValueError(f"Invalid device_id: {device_id}. Only {torch.cuda.device_count()} GPUs available.")
