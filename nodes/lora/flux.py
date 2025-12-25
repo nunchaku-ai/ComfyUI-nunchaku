@@ -114,7 +114,6 @@ class NunchakuFluxLoraLoader:
 
         transformer = model_wrapper.model
         model_wrapper.model = None
-#       ret_model = copy.deepcopy(model)  # copy everything except the model
         ret_model = model.clone()  # Use the patcher's safe clone method
         ret_model_wrapper = ret_model.model.diffusion_model
         assert isinstance(ret_model_wrapper, ComfyFluxWrapper)
