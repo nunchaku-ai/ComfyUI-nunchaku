@@ -7,12 +7,12 @@ import json
 import comfy.utils
 import torch
 from comfy import model_detection, model_management
-from comfy.model_patcher import ModelPatcher
 
-from nunchaku.models.transformers.utils import patch_scale_key
 from nunchaku.utils import check_hardware_compatibility, get_precision_from_quantization_config
 
 from ...model_configs.zimage import NunchakuZImage
+from ...model_patcher import NunchakuModelPatcher
+from ...wrappers.zimage import ComfyZImageWrapper
 from ..utils import get_filename_list, get_full_path_or_raise
 
 
@@ -150,10 +150,25 @@ def _load(sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}):
     model_config.set_inference_dtype(unet_dtype, manual_cast_dtype)
     model = model_config.get_model(patched_sd, "")
 
-    patch_scale_key(model.diffusion_model, patched_sd)
-
     model.load_model_weights(patched_sd, "")
-    return ModelPatcher(model, load_device=load_device, offload_device=offload_device)
+
+    # Preserve the actual CUDA index when running multi-GPU.
+    device_id = load_device.index if isinstance(load_device, torch.device) and load_device.type == "cuda" else 0
+    if device_id is None:
+        device_id = 0
+
+    # Wrap in ComfyZImageWrapper for LoRA support
+    model.diffusion_model = ComfyZImageWrapper(
+        model.diffusion_model,
+        config=model_config.unet_config,
+        ctx_for_copy={
+            "model_config": model_config,
+            "device": load_device,
+            "device_id": device_id,
+        },
+    )
+
+    return NunchakuModelPatcher(model, load_device=load_device, offload_device=offload_device)
 
 
 class NunchakuZImageDiTLoader:
