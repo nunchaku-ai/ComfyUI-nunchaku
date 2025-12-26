@@ -9,4 +9,5 @@ nodes.models
    nodes.models.pulid
    nodes.models.text_encoder
    nodes.models.ipadapter
+   nodes.models.zimage
    nodes.models.utils

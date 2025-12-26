@@ -90,6 +90,10 @@ models:
     filename: "svdq-{precision}_r128-qwen-image-lightningv1.1-8steps.safetensors"
     sub_folder: "diffusion_models"
     new_filename: null
+  - repo_id: "nunchaku-tech/nunchaku-z-image-turbo"
+    filename: "svdq-{precision}_r128-z-image-turbo.safetensors"
+    sub_folder: "diffusion_models"
+    new_filename: null
   # pulid related
   - repo_id: "guozinan/PuLID"
     filename: "pulid_flux_v0.9.1.safetensors"

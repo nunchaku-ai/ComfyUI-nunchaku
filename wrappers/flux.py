@@ -4,10 +4,11 @@ enabling integration with ComfyUI forward,
 LoRA composition, and advanced caching strategies.
 """
 
-from typing import Callable
+from typing import Callable, Tuple
 
 import torch
 from comfy.ldm.common_dit import pad_to_patch_size
+from comfy.model_patcher import ModelPatcher
 from einops import rearrange, repeat
 from torch import nn
 
@@ -34,6 +35,8 @@ class ComfyFluxWrapper(nn.Module):
         Optional custom forward function.
     forward_kwargs : dict, optional
         Additional keyword arguments for the forward pass.
+    ctx_for_copy:
+        A dict that holds initialization context for later duplication of this ComfyFluxWrapper object.
 
     Attributes
     ----------
@@ -51,6 +54,8 @@ class ComfyFluxWrapper(nn.Module):
         Custom forward function if provided.
     forward_kwargs : dict
         Additional arguments for the forward pass.
+    ctx_for_copy:
+        A dict that holds initialization context for later duplication of this ComfyFluxWrapper object.
     """
 
     def __init__(
@@ -60,6 +65,7 @@ class ComfyFluxWrapper(nn.Module):
         pulid_pipeline=None,
         customized_forward: Callable = None,
         forward_kwargs: dict | None = {},
+        ctx_for_copy: dict = {},
     ):
         super(ComfyFluxWrapper, self).__init__()
         self.model = model
@@ -70,6 +76,8 @@ class ComfyFluxWrapper(nn.Module):
         self.pulid_pipeline = pulid_pipeline
         self.customized_forward = customized_forward
         self.forward_kwargs = {} if forward_kwargs is None else forward_kwargs
+
+        self.ctx_for_copy = ctx_for_copy.copy()
 
         self._prev_timestep = None  # for first-block cache
         self._cache_context = None
@@ -321,3 +329,36 @@ class ComfyFluxWrapper(nn.Module):
 
         self._prev_timestep = timestep_float
         return out
+
+
+def copy_with_ctx(model_wrapper: ComfyFluxWrapper) -> Tuple[ComfyFluxWrapper, ModelPatcher]:
+    """
+    Duplicates a ComfyFluxWrapper object with it's initialization context such as comfy_config, model_config, device and device_id.
+
+    Also create a ModelPatcher object that holds the model_base object created by the model_config.
+
+    Parameters
+    ----------
+    model_wrapper : ComfyFluxWrapper
+        the object to be copied.
+
+    Returns
+    -------
+    tuple[ComfyFluxWrapper, ModelPatcher]
+        the copied ComfyFluxWrapper object and the created ModelPatcher object.
+    """
+    ctx_for_copy = model_wrapper.ctx_for_copy
+    ret_model_wrapper: ComfyFluxWrapper = ComfyFluxWrapper(
+        model_wrapper.model,
+        config=ctx_for_copy["comfy_config"]["model_config"],
+        ctx_for_copy={
+            "comfy_config": ctx_for_copy["comfy_config"],
+            "model_config": ctx_for_copy["model_config"],
+            "device": ctx_for_copy["device"],
+            "device_id": ctx_for_copy["device_id"],
+        },
+    )
+    model_base = ctx_for_copy["model_config"].get_model({})
+    model_base.diffusion_model = ret_model_wrapper
+    ret_model = ModelPatcher(model_base, ctx_for_copy["device"], ctx_for_copy["device_id"])
+    return ret_model_wrapper, ret_model

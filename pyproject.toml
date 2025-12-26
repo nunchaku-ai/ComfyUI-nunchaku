@@ -5,7 +5,7 @@ requires = [ "setuptools>=61", "wheel" ]
 
 [project]
 name = "comfyui-nunchaku"
-version = "1.0.2"
+version = "1.1.0dev"
 description = "Nunchaku ComfyUI Node. Nunchaku is a high-performance inference engine optimized for low-bit neural networks. See more details: https://github.com/nunchaku-tech/nunchaku"
 license = { file = "LICENCE.txt" }
 requires-python = ">=3.10,<3.14"
@@ -34,7 +34,7 @@ dependencies = [
 ]
 
 optional-dependencies.ci = [
-  "comfyui @ git+https://github.com/hiddenswitch/ComfyUI.git@22575de",
+  "comfyui @ git+https://github.com/hiddenswitch/ComfyUI.git@82b590c",
   "facexlib==0.3",
   "image-gen-aux @ git+https://github.com/asomoza/image_gen_aux.git@e08ae3d",
   "insightface",

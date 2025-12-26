@@ -14,4 +14,5 @@ Example Workflows
     depth.rst
     fill.rst
     ipadapter.rst
+    zimage.rst
     tools.rst
