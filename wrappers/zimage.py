@@ -597,6 +597,12 @@ class ComfyZImageWrapper(nn.Module):
 
         return model(*args, **kwargs)
 
+    def to_safely(self, *args, **kwargs):
+        """Delegate to_safely to the underlying model to support NunchakuModelPatcher."""
+        if hasattr(self.model, "to_safely"):
+            return self.model.to_safely(*args, **kwargs)
+        return self.model.to(*args, **kwargs)
+
 
 def copy_with_ctx(model_wrapper: ComfyZImageWrapper) -> Tuple[ComfyZImageWrapper, ModelPatcher]:
     """Duplicates a ComfyZImageWrapper object with its initialization context."""
