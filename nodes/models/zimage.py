@@ -8,6 +8,7 @@ import comfy.utils
 import torch
 from comfy import model_detection, model_management
 
+from nunchaku.models.linear import SVDQW4A4Linear
 from nunchaku.utils import check_hardware_compatibility, get_precision_from_quantization_config
 
 from ...model_configs.zimage import NunchakuZImage
@@ -51,7 +52,7 @@ def _patch_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Te
             continue
         ## case for attention out
         elif "attention.to_out" in key:
-            patched_state_dict[key.replace("to_out.0", "out")] = value
+            patched_state_dict[key.replace("to_out.0", "out").replace("to_out", "out")] = value
         # end of region
         # region: feed forward
         ## case for quantized feed forward
@@ -95,6 +96,42 @@ def _patch_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Te
         # end of region
 
     return patched_state_dict
+
+
+def _apply_nvfp4_scale_keys(diffusion_model: torch.nn.Module, sd: dict[str, torch.Tensor]) -> None:
+    """
+    Nunchaku nvfp4 compatibility:
+    - `SVDQW4A4Linear.wtscale` is a float attribute so it must be popped from `sd` and assigned manually.
+    - Some checkpoints may omit `*.wcscales`; default to ones to preserve stable behavior.
+    """
+
+    # Fill missing wcscales with defaults (this mirrors the approach used in our QwenImage loader).
+    ref_sd = diffusion_model.state_dict()
+    for key, value in ref_sd.items():
+        if key.endswith(".wcscales") and key not in sd:
+            sd[key] = torch.ones_like(value)
+
+    for name, module in diffusion_model.named_modules():
+        if not isinstance(module, SVDQW4A4Linear):
+            continue
+
+        wc_key = f"{name}.wcscales"
+        wt_key = f"{name}.wtscale"
+
+        # If a checkpoint stored per-channel scales under `wtscale`, map it to `wcscales`.
+        if module.wcscales is not None and wc_key not in sd and wt_key in sd:
+            wt_val = sd.get(wt_key)
+            if isinstance(wt_val, torch.Tensor) and wt_val.numel() == module.wcscales.numel() and wt_val.numel() != 1:
+                sd[wc_key] = sd.pop(wt_key)
+
+        # `wtscale` is a float (nvfp4 only) and must not be left in the state dict.
+        if module.wtscale is not None and wt_key in sd:
+            wt_val = sd.pop(wt_key)
+            if isinstance(wt_val, torch.Tensor):
+                if wt_val.numel() == 1:
+                    module.wtscale = float(wt_val.item())
+            else:
+                module.wtscale = float(wt_val)
 
 
 def _load(sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}):
@@ -149,6 +186,8 @@ def _load(sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}):
 
     model_config.set_inference_dtype(unet_dtype, manual_cast_dtype)
     model = model_config.get_model(patched_sd, "")
+
+    _apply_nvfp4_scale_keys(model.diffusion_model, patched_sd)
 
     model.load_model_weights(patched_sd, "")
 
