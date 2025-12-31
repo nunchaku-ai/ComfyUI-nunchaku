@@ -23,9 +23,8 @@ def apply_lora_to_svdq_linear(linear: SVDQW4A4Linear, lora_down: torch.Tensor, l
     dtype = linear.proj_down.dtype
     proj_down = unpack_lowrank_weight(linear.proj_down, down=True)
     proj_up = unpack_lowrank_weight(linear.proj_up, down=False)
-    # _factor = 1.0 / linear.smooth_factor.to(dtype=lora_down.dtype)
-    # concatenated_down = torch.cat([proj_down, _factor[None, :] * lora_down], dim=0).to(dtype=dtype)
-    concatenated_down = torch.cat([proj_down, lora_down], dim=0).to(dtype=dtype)
+    _factor = 1.0 / linear.smooth_factor.to(dtype=lora_down.dtype)
+    concatenated_down = torch.cat([proj_down, _factor[None, :] * lora_down], dim=0).to(dtype=dtype)
     concatenated_up = torch.cat([proj_up, lora_up], dim=1).to(dtype=dtype)
 
     linear.proj_down = nn.Parameter(pack_lowrank_weight(concatenated_down, down=True))
