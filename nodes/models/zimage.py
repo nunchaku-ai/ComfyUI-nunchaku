@@ -33,15 +33,15 @@ def _patch_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Te
     dict[str, torch.Tensor]:
         the patched state dict which follows Comfy-Org style keys.
     """
-    patched_state_dict: dict[str, torch.Tensor] = {}
+    patched_state_dict = {}
     quant_sub_keys = ["wscales", "wcscales", "wtscale", "smooth_factor_orig", "smooth_factor", "proj_down", "proj_up"]
 
     for key, value in state_dict.items():
         # region: attention
-        # case for quantized attention qkv
+        ## case for quantized attention qkv
         if "attention.to_qkv" in key:
             patched_state_dict[key.replace("to_qkv", "qkv")] = value
-        # case for non-quantized attention qkv
+        ## case for non-quantized attetion qkv
         elif "attention.to_q" in key:
             q_weight = state_dict[key]
             k_weight = state_dict[key.replace("to_q", "to_k")]
@@ -49,12 +49,12 @@ def _patch_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Te
             patched_state_dict[key.replace("to_q", "qkv")] = torch.cat([q_weight, k_weight, v_weight], dim=0)
         elif "attention.to_k" in key or "attention.to_v" in key:
             continue
-        # case for attention out
+        ## case for attention out
         elif "attention.to_out" in key:
             patched_state_dict[key.replace("to_out.0", "out")] = value
         # end of region
         # region: feed forward
-        # case for quantized feed forward
+        ## case for quantized feed forward
         elif "feed_forward.net.0.proj.qweight" in key:
             patched_state_dict[key.replace("net.0.proj", "w13")] = value
             for subkey in quant_sub_keys:
@@ -71,7 +71,7 @@ def _patch_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Te
                     patched_state_dict[quant_param_key.replace("net.2", "w2")] = state_dict[quant_param_key]
         elif any("feed_forward.net.2." + subkey in key for subkey in quant_sub_keys):
             continue
-        # case for non-quantized feed forward
+        ## case for non-quantized feed forward
         elif "feed_forward.net.0.proj.weight" in key:
             w3, w1 = torch.chunk(value, chunks=2, dim=0)
             w2 = state_dict[key.replace("0.proj", "2")]
@@ -95,13 +95,6 @@ def _patch_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Te
         # end of region
 
     return patched_state_dict
-
-
-def _cast_state_dict_fp_to(patched_sd: dict[str, torch.Tensor], target_dtype: torch.dtype) -> dict[str, torch.Tensor]:
-    for k, v in list(patched_sd.items()):
-        if torch.is_tensor(v) and v.is_floating_point() and v.dtype != target_dtype:
-            patched_sd[k] = v.to(dtype=target_dtype)
-    return patched_sd
 
 
 def _load(sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}):
@@ -138,35 +131,43 @@ def _load(sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}):
     offload_device = model_management.unet_offload_device()
     check_hardware_compatibility(quantization_config, load_device)
 
+    new_sd = sd
+
     model_config = NunchakuZImage(rank=rank, precision=precision, skip_refiners=skip_refiners)
+
     unet_weight_dtype = list(model_config.supported_inference_dtypes)
 
     unet_dtype = model_management.unet_dtype(
         model_params=parameters, supported_dtypes=unet_weight_dtype, weight_dtype=weight_dtype
     )
+
     manual_cast_dtype = model_management.unet_manual_cast(
         unet_dtype, load_device, model_config.supported_inference_dtypes
     )
 
-    patched_sd = _patch_state_dict(sd)
+    if torch.cuda.is_available() and torch.cuda.is_bf16_supported() and unet_dtype == torch.float16:
+        unet_dtype = torch.bfloat16
+        manual_cast_dtype = None
 
-    target_dtype = manual_cast_dtype if manual_cast_dtype is not None else unet_dtype
-    patched_sd = _cast_state_dict_fp_to(patched_sd, target_dtype)
+    patched_sd = _patch_state_dict(new_sd)
 
     model_config.set_inference_dtype(unet_dtype, manual_cast_dtype)
     model = model_config.get_model(patched_sd, "")
 
     model_sd = model.diffusion_model.state_dict()
-    for k, model_v in model_sd.items():
-        if k in patched_sd:
-            ckpt_v = patched_sd[k]
-            if torch.is_tensor(ckpt_v) and torch.is_tensor(model_v):
-                if ckpt_v.is_floating_point() and ckpt_v.dtype != model_v.dtype:
-                    patched_sd[k] = ckpt_v.to(dtype=model_v.dtype)
+    for key, model_value in model_sd.items():
+        if key in patched_sd:
+            ckpt_value = patched_sd[key]
+            if torch.is_tensor(ckpt_value) and torch.is_tensor(model_value):
+                if ckpt_value.is_floating_point() and ckpt_value.dtype != model_value.dtype:
+                    cast_value = ckpt_value.to(dtype=model_value.dtype)
+                    if model_value.dtype == torch.float16:
+                        cast_value = torch.nan_to_num(cast_value, nan=0.0, posinf=65504, neginf=-65504)
+                    patched_sd[key] = cast_value
 
     patch_scale_key(model.diffusion_model, patched_sd)
-    model.load_model_weights(patched_sd, "")
 
+    model.load_model_weights(patched_sd, "")
     return ModelPatcher(model, load_device=load_device, offload_device=offload_device)
 
 
@@ -228,4 +229,5 @@ class NunchakuZImageDiTLoader:
         sd, metadata = comfy.utils.load_torch_file(model_path, return_metadata=True)
 
         model = _load(sd, metadata=metadata)
+
         return (model,)
