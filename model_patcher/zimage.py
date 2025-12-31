@@ -20,6 +20,18 @@ from nunchaku.models.linear import SVDQW4A4Linear
 
 
 def apply_lora_to_svdq_linear(linear: SVDQW4A4Linear, lora_down: torch.Tensor, lora_up: torch.Tensor):
+    """
+    Apply LoRA weights into quantized SVDQW4A4Linear module.
+
+    Parameters
+    ----------
+    linear : SVDQW4A4Linear
+        The Nunchaku quantized module to apply LoRAs to
+    lora_down : torch.Tensor
+        The down projection part of the LoRA weights.
+    lora_up : torch.Tensor
+        The up projection part of the LoRA weights.
+    """
     dtype = linear.proj_down.dtype
     proj_down = unpack_lowrank_weight(linear.proj_down, down=True)
     proj_up = unpack_lowrank_weight(linear.proj_up, down=False)
@@ -83,16 +95,38 @@ def concat_lora_weights(
 
 class ZImageModelPatcher(ModelPatcher):
     def __init__(self, model, load_device, offload_device, size=0, weight_inplace_update=False):
+        """
+        Adapted from comfy.model_patcher.ModelPatcher#clone
+
+        Note
+        ----
+        + Always set `weight_inplace_update` to False
+        + Add `svdq_backup` dict for loading/unloading lora weights for Nunchaku Z-Image model.
+        """
         super().__init__(model, load_device, offload_device, size, weight_inplace_update=False)
         self.svdq_backup = {}
 
     def clone(self):
+        """
+        Adapted from comfy.model_patcher.ModelPatcher#clone
+
+        Note
+        ----
+        + Clone quantized svdq_backup weights for Nunchaku Z-Image model.
+        """
         n = ModelPatcher.clone(self)
         n.svdq_backup = self.svdq_backup
         logging.info("ZImageModelPatcher cloned.")
         return n
 
     def unpatch_model(self, device_to=None, unpatch_weights=True):
+        """
+        Adapted from comfy.model_patcher.ModelPatcher#unpatch_model
+
+        Note
+        ----
+        + Unpatch loras and restore original weights from svdq_backup for Nunchaku Z-Image model.
+        """
         super().unpatch_model(device_to, unpatch_weights)
         if unpatch_weights:
             for k, (proj_down, proj_up) in self.svdq_backup.items():
@@ -114,6 +148,9 @@ class ZImageModelPatcher(ModelPatcher):
     def partially_unload(self, device_to, memory_to_free=0, force_patch_weights=False):
         """
         Adapted from comfy.model_patcher.ModelPatcher#partially_unload
+
+        Note
+        ----
         + Unload quantized svdq linears for Nunchaku Z-Image model.
         """
         with self.use_ejected():
@@ -223,6 +260,9 @@ class ZImageModelPatcher(ModelPatcher):
     def add_patches(self, patches, strength_patch=1.0, strength_model=1.0):
         """
         Adapted from comfy.model_patcher.ModelPatcher#add_patches
+
+        Note
+        ----
         + Modify the valid key_set
         """
         with self.use_ejected():
@@ -248,6 +288,14 @@ class ZImageModelPatcher(ModelPatcher):
             return list(p)
 
     def patch_weight_to_device(self, key, device_to=None, inplace_update=False):
+        """
+        Adapted from comfy.model_patcher.ModelPatcher#patch_weight_to_device
+
+        Note
+        ----
+        + Patch non-quantized linear modules the same way as original ModelPatcher
+        + Patch quantized svdq_linear modules by concatenate loras into proj_down and proj_up.
+        """
         assert isinstance(self.model, BaseModel)
         assert isinstance(self.model.diffusion_model, NextDiT)
         assert isinstance(key, str)
