@@ -44,11 +44,12 @@ def fuse_to_svdquant_linear(comfy_linear1: nn.Linear, comfy_linear2: nn.Linear, 
     """
     assert comfy_linear1.in_features == comfy_linear2.in_features
     assert comfy_linear1.bias is None and comfy_linear2.bias is None
+    torch_dtype = kwargs.pop("torch_dtype", comfy_linear1.weight.dtype)
     return SVDQW4A4Linear(
         comfy_linear1.in_features,
         comfy_linear1.out_features + comfy_linear2.out_features,
         bias=False,
-        torch_dtype=comfy_linear1.weight.dtype,
+        torch_dtype=torch_dtype,
         device=comfy_linear1.weight.device,
         **kwargs,
     )

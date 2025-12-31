@@ -3,13 +3,14 @@ This module provides the :class:`NunchakuZImageDiTLoader` class for loading Nunc
 """
 
 import json
+import logging
 
 import comfy.utils
 import torch
 from comfy import model_detection, model_management
 
-from nunchaku.models.transformers.utils import patch_scale_key
-from nunchaku.utils import check_hardware_compatibility, get_precision_from_quantization_config
+from nunchaku.models.transformers.utils import convert_fp16, patch_scale_key
+from nunchaku.utils import check_hardware_compatibility, get_precision_from_quantization_config, is_turing
 
 from ...model_configs.zimage import NunchakuZImage
 from ...model_patcher.zimage import ZImageModelPatcher
@@ -135,22 +136,28 @@ def _load(sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}):
 
     model_config = NunchakuZImage(rank=rank, precision=precision, skip_refiners=skip_refiners)
 
-    unet_weight_dtype = list(model_config.supported_inference_dtypes)
-
-    unet_dtype = model_management.unet_dtype(
-        model_params=parameters, supported_dtypes=unet_weight_dtype, weight_dtype=weight_dtype
-    )
-
-    manual_cast_dtype = model_management.unet_manual_cast(
-        unet_dtype, load_device, model_config.supported_inference_dtypes
-    )
+    if not is_turing():
+        unet_weight_dtype = list(model_config.supported_inference_dtypes)
+        unet_dtype = model_management.unet_dtype(
+            model_params=parameters, supported_dtypes=unet_weight_dtype, weight_dtype=weight_dtype
+        )
+        manual_cast_dtype = model_management.unet_manual_cast(
+            unet_dtype, load_device, model_config.supported_inference_dtypes
+        )
+        torch_dtype = torch.bfloat16
+    else:
+        unet_dtype = torch.bfloat16
+        manual_cast_dtype = torch.float16
+        torch_dtype = torch.float16
+    logging.info(f"unet_dtype: {unet_dtype}, manual_cast_dtype: {manual_cast_dtype}, svdq_linear_dtype: {torch_dtype}")
+    model_config.set_inference_dtype(unet_dtype, manual_cast_dtype)
 
     patched_sd = _patch_state_dict(new_sd)
-
-    model_config.set_inference_dtype(unet_dtype, manual_cast_dtype)
-    model = model_config.get_model(patched_sd, "")
+    model = model_config.get_model(patched_sd, "", torch_dtype=torch_dtype)
 
     patch_scale_key(model.diffusion_model, patched_sd)
+    if torch_dtype == torch.float16:
+        convert_fp16(model.diffusion_model, patched_sd)
 
     model.load_model_weights(patched_sd, "")
     return ZImageModelPatcher(model, load_device=load_device, offload_device=offload_device)

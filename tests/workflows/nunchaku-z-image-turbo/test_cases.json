@@ -3,14 +3,17 @@
     "ref_image_url": "https://huggingface.co/datasets/nunchaku-tech/test-data/resolve/main/ComfyUI-nunchaku/ref_images/comfyui-z-image-turbo-bf16.png",
     "expected_clip_iqa": {
       "int4-bf16": 0.6,
+      "int4-fp16": 0.6,
       "fp4-bf16": 0.65
     },
     "expected_lpips": {
       "int4-bf16": 0.23,
+      "int4-fp16": 0.23,
       "fp4-bf16": 0.22
     },
     "expected_psnr": {
       "int4-bf16": 19,
+      "int4-fp16": 19,
       "fp4-bf16": 19
     },
     "inputs": {

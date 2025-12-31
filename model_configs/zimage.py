@@ -68,5 +68,7 @@ class NunchakuZImage(ZImageModelConfig):
             Instantiated model_base.Lumina2 object with Nunchaku quantized transformer blocks.
         """
         out: Lumina2 = super().get_model(state_dict, prefix, device)
-        patch_model(out.diffusion_model, skip_refiners=self.skip_refiners, rank=self.rank, precision=self.precision)
+        patch_model(
+            out.diffusion_model, skip_refiners=self.skip_refiners, rank=self.rank, precision=self.precision, **kwargs
+        )
         return out
