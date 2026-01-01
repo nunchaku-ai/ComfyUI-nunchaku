@@ -139,7 +139,7 @@
   "60": {
     "inputs": {
       "lora_name": "loras/Z-Image-Art2.1.safetensors",
-      "strength_model": 0.25,
+      "strength_model": 0.7,
       "model": [
         "58",
         0
@@ -153,7 +153,7 @@
   "61": {
     "inputs": {
       "lora_name": "loras/z_image_turbo_childrens_drawings.safetensors",
-      "strength_model": 0.7,
+      "strength_model": 0.9,
       "model": [
         "60",
         0

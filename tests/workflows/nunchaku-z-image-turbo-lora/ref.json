@@ -692,6 +692,5 @@
     "VHS_MetadataImage": true,
     "VHS_KeepIntermediate": true
   },
-  "version": 0.4,
-  "_ref_image_url_": "https://huggingface.co/datasets/nunchaku-tech/test-data/resolve/main/ComfyUI-nunchaku/ref_images/nunchaku-z-image-turbo-lora.png"
+  "version": 0.4
 }
