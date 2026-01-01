@@ -1,0 +1,23 @@
+[
+  {
+    "ref_image_url": "https://i.meee.com.tw/HBk36gH.png",
+    "expected_clip_iqa": {
+      "int4-bf16": 0.6,
+      "fp4-bf16": 0.65
+    },
+    "expected_lpips": {
+      "int4-bf16": 0.27,
+      "fp4-bf16": 0.27
+    },
+    "expected_psnr": {
+      "int4-bf16": 17,
+      "fp4-bf16": 17
+    },
+    "inputs": {
+      "58,inputs,model_name": "svdq-{precision}_r128-z-image-turbo.safetensors",
+      "44,inputs,seed": 88888,
+      "60,inputs,lora_name": "Z-Image-Art2.1.safetensors",
+      "61,inputs,lora_name": "z_image_turbo_childrens_drawings.safetensors"
+    }
+  }
+]

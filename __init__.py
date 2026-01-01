@@ -139,10 +139,10 @@ try:
     NODE_CLASS_MAPPINGS["NunchakuIPAdapterLoader"] = NunchakuIPAdapterLoader
 except ImportError:
     logger.exception("Nodes `NunchakuFluxIPAdapterApply` and `NunchakuIPAdapterLoader` import failed:")
-    
+
 try:
     from .nodes.models.zimage import NunchakuZImageDiTLoader
-    
+
     NODE_CLASS_MAPPINGS["NunchakuZImageDiTLoader"] = NunchakuZImageDiTLoader
 except ImportError:
     logger.exception("Nodes `NunchakuZImageDiTLoader` import failed:")
