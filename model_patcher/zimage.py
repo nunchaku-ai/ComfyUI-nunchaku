@@ -115,7 +115,7 @@ class ZImageModelPatcher(ModelPatcher):
         """
         n = ModelPatcher.clone(self)
         n.svdq_backup = self.svdq_backup
-        logging.info("ZImageModelPatcher cloned.")
+        logging.debug("ZImageModelPatcher cloned.")
         return n
 
     def unpatch_model(self, device_to=None, unpatch_weights=True):
