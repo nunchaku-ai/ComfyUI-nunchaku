@@ -431,6 +431,7 @@ class NunchakuQwenImageTransformerBlock(nn.Module):
         encoder_hidden_states_mask: torch.Tensor,
         temb: torch.Tensor,
         image_rotary_emb: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        timestep_zero_index=None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Forward pass for the transformer block.
@@ -560,9 +561,11 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
         num_attention_heads: int = 24,
         joint_attention_dim: int = 3584,
         pooled_projection_dim: int = 768,
-        guidance_embeds: bool = False,
         axes_dims_rope: Tuple[int, int, int] = (16, 56, 56),
+        default_ref_method="index",
         image_model=None,
+        final_layer=True,
+        use_additional_t_cond=False,
         dtype=None,
         device=None,
         operations=None,
@@ -575,12 +578,14 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
         self.patch_size = patch_size
         self.out_channels = out_channels or in_channels
         self.inner_dim = num_attention_heads * attention_head_dim
+        self.default_ref_method = default_ref_method
 
         self.pe_embedder = EmbedND(dim=attention_head_dim, theta=10000, axes_dim=list(axes_dims_rope))
 
         self.time_text_embed = QwenTimestepProjEmbeddings(
             embedding_dim=self.inner_dim,
             pooled_projection_dim=pooled_projection_dim,
+            use_additional_t_cond=use_additional_t_cond,
             dtype=dtype,
             device=device,
             operations=operations,
@@ -606,20 +611,21 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
             ]
         )
 
-        self.norm_out = LastLayer(
-            self.inner_dim,
-            self.inner_dim,
-            dtype=dtype,
-            device=device,
-            operations=operations,
-        )
-        self.proj_out = operations.Linear(
-            self.inner_dim,
-            patch_size * patch_size * self.out_channels,
-            bias=True,
-            dtype=dtype,
-            device=device,
-        )
+        if final_layer:
+            self.norm_out = LastLayer(
+                self.inner_dim,
+                self.inner_dim,
+                dtype=dtype,
+                device=device,
+                operations=operations,
+            )
+            self.proj_out = operations.Linear(
+                self.inner_dim,
+                patch_size * patch_size * self.out_channels,
+                bias=True,
+                dtype=dtype,
+                device=device,
+            )
         self.gradient_checkpointing = False
 
     def _forward(
@@ -628,8 +634,8 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
         timesteps,
         context,
         attention_mask=None,
-        guidance: torch.Tensor = None,
         ref_latents=None,
+        additional_t_cond=None,
         transformer_options={},
         control=None,
         **kwargs,
@@ -673,14 +679,22 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
         hidden_states, img_ids, orig_shape = self.process_img(x)
         num_embeds = hidden_states.shape[1]
 
+        timestep_zero_index = None
         if ref_latents is not None:
             h = 0
             w = 0
             index = 0
-            index_ref_method = kwargs.get("ref_latents_method", "index") == "index"
+            ref_method = kwargs.get("ref_latents_method", self.default_ref_method)
+            index_ref_method = (ref_method == "index") or (ref_method == "index_timestep_zero")
+            negative_ref_method = ref_method == "negative_index"
+            timestep_zero = ref_method == "index_timestep_zero"
             for ref in ref_latents:
                 if index_ref_method:
                     index += 1
+                    h_offset = 0
+                    w_offset = 0
+                elif negative_ref_method:
+                    index -= 1
                     h_offset = 0
                     w_offset = 0
                 else:
@@ -697,6 +711,10 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
                 kontext, kontext_ids, _ = self.process_img(ref, index=index, h_offset=h_offset, w_offset=w_offset)
                 hidden_states = torch.cat([hidden_states, kontext], dim=1)
                 img_ids = torch.cat([img_ids, kontext_ids], dim=1)
+            if timestep_zero:
+                if index > 0:
+                    timestep = torch.cat([timestep, timestep * 0], dim=0)
+                    timestep_zero_index = num_embeds
 
         txt_start = round(
             max(
@@ -717,14 +735,7 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
         encoder_hidden_states = self.txt_norm(encoder_hidden_states)
         encoder_hidden_states = self.txt_in(encoder_hidden_states)
 
-        if guidance is not None:
-            guidance = guidance * 1000
-
-        temb = (
-            self.time_text_embed(timestep, hidden_states)
-            if guidance is None
-            else self.time_text_embed(timestep, guidance, hidden_states)
-        )
+        temb = self.time_text_embed(timestep, hidden_states, additional_t_cond)
 
         patches_replace = transformer_options.get("patches_replace", {})
         blocks_replace = patches_replace.get("dit", {})
@@ -764,6 +775,7 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
                         encoder_hidden_states_mask=encoder_hidden_states_mask,
                         temb=temb,
                         image_rotary_emb=image_rotary_emb,
+                        timestep_zero_index=timestep_zero_index,
                     )
                 # ControlNet helpers(device/dtype-safe residual adds)
                 _control = (

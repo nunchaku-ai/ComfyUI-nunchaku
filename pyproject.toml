@@ -34,7 +34,7 @@ dependencies = [
 ]
 
 optional-dependencies.ci = [
-  "comfyui @ git+https://github.com/hiddenswitch/ComfyUI.git@82b590c",
+  "comfyui @ git+https://github.com/hiddenswitch/ComfyUI.git@d18c785d",
   "facexlib==0.3",
   "image-gen-aux @ git+https://github.com/asomoza/image_gen_aux.git@e08ae3d",
   "insightface",
