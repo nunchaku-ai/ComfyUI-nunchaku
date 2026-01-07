@@ -41,5 +41,26 @@ Text-to-image workflow using the Nunchaku Z-Image-Turbo model, with one or multi
 - Nunchak Z-Image-Turbo: :download:`Hugging Face <https://huggingface.co/nunchaku-tech/nunchaku-z-image-turbo>` or :download:`ModelScope <https://modelscope.cn/models/nunchaku-tech/nunchaku-z-image-turbo>`
   (Place in ``models/diffusion_models``)
 
+.. _nunchaku-z-image-turbo-controlnet-json:
+
+nunchaku-z-image-turbo-controlnet.json
+--------------------------------------
+
+.. image:: https://huggingface.co/datasets/nunchaku-tech/cdn/resolve/main/ComfyUI-nunchaku/workflows/nunchaku-z-image-turbo-controlnet.png
+    :alt: nunchaku-z-image-turbo-controlnet.json
+    :target: https://github.com/nunchaku-tech/ComfyUI-nunchaku/blob/main/example_workflows/nunchaku-z-image-turbo-controlnet.json
+
+Text-to-image workflow using the Nunchaku Z-Image-Turbo model with official controlnet (https://huggingface.co/alibaba-pai/Z-Image-Turbo-Fun-Controlnet-Union).
+
+.. note::
+  Place controlnet model file in ``models/model_patches``.
+
+
+**Links:**
+
+- Workflow: :download:`nunchaku-z-image-turbo-controlnet.json <https://github.com/nunchaku-tech/ComfyUI-nunchaku/blob/main/example_workflows/nunchaku-z-image-turbo-controlnet.json>`
+- Nunchak Z-Image-Turbo: :download:`Hugging Face <https://huggingface.co/nunchaku-tech/nunchaku-z-image-turbo>` or :download:`ModelScope <https://modelscope.cn/models/nunchaku-tech/nunchaku-z-image-turbo>`
+  (Place in ``models/diffusion_models``)
+
 .. seealso::
     See nodes :ref:`nunchaku-z-image-dit-loader`.
