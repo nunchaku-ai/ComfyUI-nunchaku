@@ -28,13 +28,19 @@ models:
     filename: "hand_drawn_game.safetensors"
     sub_folder: "loras"
     new_filename: null
-  # nunchaku text encoders
+  - repo_id: "Norod78/Z-Image-Turbo-Loras"
+    filename: "VintageCartoonStyle_FluxDevLora.safetensors"
+    sub_folder: "loras"
+    new_filename: "vintage cartoon.safetensors"
   - repo_id: "nunchaku-tech/nunchaku-t5"
+    # nunchaku text encoders
+
     filename: "awq-int4-flux.1-t5xxl.safetensors"
     sub_folder: "text_encoders"
     new_filename: null
-  # nunchaku diffusion models
   - repo_id: "nunchaku-tech/nunchaku-flux.1-dev"
+    # nunchaku diffusion models
+
     filename: "svdq-{precision}_r32-flux.1-dev.safetensors"
     sub_folder: "diffusion_models"
     new_filename: null
@@ -94,8 +100,9 @@ models:
     filename: "svdq-{precision}_r128-z-image-turbo.safetensors"
     sub_folder: "diffusion_models"
     new_filename: null
-  # pulid related
   - repo_id: "guozinan/PuLID"
+    # pulid related
+
     filename: "pulid_flux_v0.9.1.safetensors"
     sub_folder: "pulid"
     new_filename: null
@@ -103,8 +110,9 @@ models:
     filename: "EVA02_CLIP_L_336_psz14_s6B.pt"
     sub_folder: "clip"
     new_filename: null
-  # other
   - repo_id: "Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro-2.0"
+    # other
+
     filename: "diffusion_pytorch_model.safetensors"
     sub_folder: "controlnet"
     new_filename: "controlnet-union-pro-2.0.safetensors"

@@ -141,11 +141,13 @@ except ImportError:
     logger.exception("Nodes `NunchakuFluxIPAdapterApply` and `NunchakuIPAdapterLoader` import failed:")
 
 try:
+    from .nodes.lora.zimage import NunchakuZImageLoraLoader
     from .nodes.models.zimage import NunchakuZImageDiTLoader
 
     NODE_CLASS_MAPPINGS["NunchakuZImageDiTLoader"] = NunchakuZImageDiTLoader
+    NODE_CLASS_MAPPINGS["NunchakuZImageLoraLoader"] = NunchakuZImageLoraLoader
 except ImportError:
-    logger.exception("Nodes `NunchakuZImageDiTLoader` import failed:")
+    logger.exception("Nodes `NunchakuZImageDiTLoader` and `NunchakuZImageLoraLoader` import failed:")
 
 try:
     from .nodes.tools.merge_safetensors import NunchakuModelMerger

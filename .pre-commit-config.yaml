@@ -15,11 +15,13 @@ repos:
       - id: check-ast
       - id: check-added-large-files
       - id: check-merge-conflict
-      #      - id: check-shebang-scripts-are-executable
       - id: detect-private-key
         #      - id: debug-statements
-        #      - id: no-commit-to-branch
+
+        #      - id: check-shebang-scripts-are-executable
   - repo: https://github.com/PyCQA/isort
+    #      - id: no-commit-to-branch
+
     rev: 6.1.0
     hooks:
       - id: isort
