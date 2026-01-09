@@ -10,7 +10,6 @@ Codes are adapted from:
 """
 
 import torch
-
 from comfy.model_base import Lumina2
 from comfy.supported_models import ZImage as ZImageModelConfig
 
