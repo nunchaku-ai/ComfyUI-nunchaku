@@ -38,4 +38,5 @@ class NunchakuModelPatcher(ModelPatcher):
             If True, unpatch all model components (default is True).
         """
         self.eject_model()
+        self.model.loras = []
         self.model.diffusion_model.to_safely(self.offload_device)

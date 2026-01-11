@@ -7,6 +7,7 @@ import logging
 import os
 
 import comfy.utils
+import folder_paths
 import torch
 from comfy import model_detection, model_management
 
@@ -143,6 +144,16 @@ class NunchakuQwenImageDiTLoader:
                 ),
             },
             "optional": {
+                "vram_margin_gb": (
+                    "FLOAT",
+                    {
+                        "default": 4.0,
+                        "min": 0.0,
+                        "max": 64.0,
+                        "step": 0.1,
+                        "tooltip": "Set a VRAM safety margin (in GB). If 'auto' offload is on and free VRAM drops below this margin when loading LoRAs, CPU offload will be dynamically enabled."
+                    },
+                ),
                 "num_blocks_on_gpu": (
                     "INT",
                     {
@@ -174,7 +185,7 @@ class NunchakuQwenImageDiTLoader:
     TITLE = "Nunchaku Qwen-Image DiT Loader"
 
     def load_model(
-        self, model_name: str, cpu_offload: str, num_blocks_on_gpu: int = 1, use_pin_memory: str = "disable", **kwargs
+        self, model_name: str, cpu_offload: str, num_blocks_on_gpu: int = 1, use_pin_memory: str = "disable", vram_margin_gb: float = 4.0, **kwargs
     ):
         """
         Load the Qwen-Image model from file and return a patched model.
@@ -189,6 +200,8 @@ class NunchakuQwenImageDiTLoader:
             The number of transformer blocks to keep on GPU when CPU offload is enabled.
         use_pin_memory : str
             Whether to use pinned memory for the transformer blocks when CPU offload is enabled.
+        vram_margin_gb : float
+            VRAM safety margin for dynamic LoRA offloading.
 
         Returns
         -------
@@ -196,7 +209,19 @@ class NunchakuQwenImageDiTLoader:
             A tuple containing the loaded and patched model.
         """
         model_path = get_full_path_or_raise("diffusion_models", model_name)
-        sd, metadata = comfy.utils.load_torch_file(model_path, return_metadata=True)
+
+        # In-process cache to avoid repeated disk I/O when toggling options
+        if not hasattr(self, "_sd_cache"):
+            self._sd_cache = {}
+
+        cache_key = model_path
+        cached = self._sd_cache.get(cache_key)
+        if cached is not None:
+            sd, metadata = cached
+            logger.debug(f"Using cached state_dict for {model_path}")
+        else:
+            sd, metadata = comfy.utils.load_torch_file(model_path, return_metadata=True)
+            self._sd_cache[cache_key] = (sd, metadata)
 
         if cpu_offload == "auto":
             if get_gpu_memory() < 15:  # 15GB threshold
@@ -213,14 +238,27 @@ class NunchakuQwenImageDiTLoader:
             cpu_offload_enabled = False
             logger.info("Disabling CPU offload")
 
-        model = load_diffusion_model_state_dict(
-            sd, metadata=metadata, model_options={"cpu_offload_enabled": cpu_offload_enabled}
-        )
-
+        model = load_diffusion_model_state_dict(sd, metadata=metadata, model_options={"cpu_offload_enabled": cpu_offload_enabled})
         if cpu_offload_enabled:
             assert use_pin_memory in ["enable", "disable"], "Invalid use_pin_memory option"
             model.model.diffusion_model.set_offload(
                 cpu_offload_enabled, num_blocks_on_gpu=num_blocks_on_gpu, use_pin_memory=use_pin_memory == "enable"
             )
+
+        # Wrap transformer in ComfyQwenImageWrapper for LoRA support (Flux-style)
+        from ...models.qwenimage import NunchakuQwenImageTransformer2DModel
+        from ...wrappers.qwenimage import ComfyQwenImageWrapper
+
+        if isinstance(model.model.diffusion_model, NunchakuQwenImageTransformer2DModel):
+            # Only wrap if not already wrapped
+            if not isinstance(model.model.diffusion_model, ComfyQwenImageWrapper):
+                wrapper = ComfyQwenImageWrapper(
+                    model=model.model.diffusion_model,
+                    config=model.model.model_config.unet_config,
+                    cpu_offload_setting=cpu_offload,
+                    vram_margin_gb=vram_margin_gb
+                )
+                model.model.diffusion_model = wrapper
+                logger.debug("Wrapped transformer in ComfyQwenImageWrapper for LoRA support")
 
         return (model,)
