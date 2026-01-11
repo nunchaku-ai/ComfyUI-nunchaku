@@ -20,7 +20,7 @@ from comfy.ldm.modules.attention import optimized_attention_masked
 
 from nunchaku.models.embeddings import pack_rotemb
 from nunchaku.models.linear import SVDQW4A4Linear
-from nunchaku.ops.fused import fused_qkv_norm_rottary
+from nunchaku.ops.gemm import svdq_gemm_w4a4_cuda
 from nunchaku.utils import pad_tensor
 
 
@@ -53,6 +53,51 @@ def fuse_to_svdquant_linear(comfy_linear1: nn.Linear, comfy_linear2: nn.Linear, 
         device=comfy_linear1.weight.device,
         **kwargs,
     )
+
+
+def fused_qkv_norm_rotary(
+    x: torch.Tensor,
+    qkv: SVDQW4A4Linear,
+    q_norm_weight: nn.Parameter,
+    k_norm_weight: nn.Parameter,
+    freqs_cis: torch.Tensor,
+):
+    """
+    Fused quantized QKV projection with RMSNorm and rotary embeddings.
+
+    Adapted from nunchaku.ops.fused#fused_qkv_norm_rottary.
+
+    Manual cast `q_norm` weight and `k_norm` weight from `torch.bfloat16` to `torch.float16` when `x` dtype is `torch.float16`.
+    """
+    batch_size, seq_len, channels = x.shape
+    x_dtype = x.dtype
+    x = x.view(batch_size * seq_len, channels)
+    quantized_x, ascales, lora_act = qkv.quantize(x)
+    output = torch.empty(batch_size * seq_len, qkv.out_features, dtype=x.dtype, device=x.device)
+    if (q_norm_weight is not None) and (x_dtype != q_norm_weight.dtype):
+        assert x_dtype == torch.float16
+        assert q_norm_weight.dtype == torch.bfloat16
+        assert k_norm_weight.dtype == torch.bfloat16
+        q_norm_weight = torch.nan_to_num(q_norm_weight.to(dtype=torch.float16), nan=0.0, posinf=65504, neginf=-65504)
+        k_norm_weight = torch.nan_to_num(k_norm_weight.to(dtype=torch.float16), nan=0.0, posinf=65504, neginf=-65504)
+    svdq_gemm_w4a4_cuda(
+        act=quantized_x,
+        wgt=qkv.qweight,
+        out=output,
+        ascales=ascales,
+        wscales=qkv.wscales,
+        lora_act_in=lora_act,
+        lora_up=qkv.proj_up,
+        bias=qkv.bias,
+        fp4=qkv.precision == "nvfp4",
+        alpha=qkv.wtscale,
+        wcscales=qkv.wcscales,
+        norm_q=q_norm_weight if q_norm_weight is not None else None,
+        norm_k=k_norm_weight if k_norm_weight is not None else None,
+        rotary_emb=freqs_cis,
+    )
+    output = output.view(batch_size, seq_len, -1)
+    return output
 
 
 class ComfyNunchakuZImageAttention(JointAttention):
@@ -88,11 +133,11 @@ class ComfyNunchakuZImageAttention(JointAttention):
         """
         logging.debug(f"x shape: {x.shape}, freqs_cis shape: {freqs_cis.shape}")
         bsz, seqlen, _ = x.shape
-        qkv = fused_qkv_norm_rottary(
+        qkv = fused_qkv_norm_rotary(
             x,
             self.qkv,
-            self.q_norm,
-            self.k_norm,
+            self.q_norm.weight,
+            self.k_norm.weight,
             freqs_cis,
         )
 
