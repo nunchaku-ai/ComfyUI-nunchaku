@@ -32,7 +32,22 @@ from nunchaku.models.utils import CPUOffloadManager
 from nunchaku.ops.fused import fused_gelu_mlp
 
 from ..mixins.model import NunchakuModelMixin
-
+# [CN] ComfyUI master 的 CFG/patcher/map-over-list 路径可能把部分输入包装成 list/tuple。
+#      为了兼容但不改变语义：这里只允许解包“单元素嵌套”（[x], [[x]], (x,) -> x）。
+#      遇到多元素 list/tuple（例如 [a,b]）语义不明确（可能是 CFG/cond batch），必须直接报错，
+#      禁止 cat/拼接/取第一个，否则会造成生成语义漂移（“不听 prompt”）。
+# [EN] ComfyUI master execution paths may wrap some inputs into list/tuple.
+#      To keep semantics unchanged, we only unwrap single-element nesting ([x], [[x]], (x,) -> x).
+#      Multi-element list/tuple is semantically ambiguous (could be CFG/cond batching) and must error out.
+#      DO NOT cat/merge/pick-first, or generation semantics may drift (model stops following prompts).
+def _unwrap_tensor_like(v, name: str):
+    while isinstance(v, (list, tuple)):
+        if len(v) == 0:
+            raise ValueError(f"{name} is empty")
+        if len(v) != 1:
+            raise TypeError(f"{name} has {len(v)} elements; refusing to merge (semantic change)")
+        v = v[0]
+    return v
 
 class NunchakuGELU(GELU):
     """
@@ -628,14 +643,28 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
         timesteps,
         context,
         attention_mask=None,
-        guidance: torch.Tensor = None,
         ref_latents=None,
+        additional_t_cond=None,
         transformer_options={},
         control=None,
         **kwargs,
     ):
+
         """
-        Forward pass of the Nunchaku Qwen-Image model.
+        [CN] 重要说明：
+             本 _forward 函数的参数顺序必须与 ComfyUI master
+             (comfy/ldm/qwen_image/model.py) 中的 _forward 完全一致。
+             如果参数顺序不一致，会发生位置参数错位
+             （例如 ref_latents 被当成 additional_t_cond 或 guidance），
+             从而导致 dtype 报错或生成语义漂移（模型不听 prompt）。
+
+        [EN] IMPORTANT:
+             The parameter order of this _forward function MUST exactly match
+             ComfyUI master (comfy/ldm/qwen_image/model.py::_forward).
+             Any mismatch may shift positional arguments
+             (e.g. ref_latents passed as additional_t_cond),
+             leading to dtype errors or semantic drift in generation.
+             Forward pass of the Nunchaku Qwen-Image model.
 
         Parameters
         ----------
@@ -647,8 +676,10 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
             Textual context tensor (e.g., from a text encoder).
         attention_mask : torch.Tensor, optional
             Optional attention mask for the context.
-        guidance : torch.Tensor, optional
-            Optional guidance tensor for classifier-free guidance.
+        additional_t_cond : torch.Tensor or list[torch.Tensor], optional
+            Optional additional timestep condition used by QwenImage.
+            May be wrapped as a single-element list by ComfyUI execution paths and
+            will be unwrapped before being passed to time_text_embed.
         ref_latents : list[torch.Tensor], optional
             Optional list of reference latent tensors for multi-image conditioning.
         transformer_options : dict, optional
@@ -717,14 +748,11 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
         encoder_hidden_states = self.txt_norm(encoder_hidden_states)
         encoder_hidden_states = self.txt_in(encoder_hidden_states)
 
-        if guidance is not None:
-            guidance = guidance * 1000
+        if additional_t_cond is not None:
+            additional_t_cond = _unwrap_tensor_like(additional_t_cond, "additional_t_cond")
 
-        temb = (
-            self.time_text_embed(timestep, hidden_states)
-            if guidance is None
-            else self.time_text_embed(timestep, guidance, hidden_states)
-        )
+        temb = self.time_text_embed(timestep, hidden_states, additional_t_cond)
+
 
         patches_replace = transformer_options.get("patches_replace", {})
         blocks_replace = patches_replace.get("dit", {})
