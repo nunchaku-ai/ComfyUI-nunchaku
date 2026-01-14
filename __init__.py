@@ -86,6 +86,13 @@ except ImportError:
     logger.exception("Node `NunchakuFluxDiTLoader` import failed:")
 
 try:
+    from .nodes.models.flux_piflow import NunchakuFluxPiFlowDiTLoader
+
+    NODE_CLASS_MAPPINGS["NunchakuFluxPiFlowDiTLoader"] = NunchakuFluxPiFlowDiTLoader
+except ImportError:
+    logger.exception("Node `NunchakuFluxPiFlowDiTLoader` import failed:")
+
+try:
     from .nodes.models.qwenimage import NunchakuQwenImageDiTLoader
 
     NODE_CLASS_MAPPINGS["NunchakuQwenImageDiTLoader"] = NunchakuQwenImageDiTLoader
