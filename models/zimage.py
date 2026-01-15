@@ -24,6 +24,12 @@ from nunchaku.ops.gemm import svdq_gemm_w4a4_cuda
 from nunchaku.utils import pad_tensor
 
 
+def add_comfy_cast_weights_attr(svdq_linear: SVDQW4A4Linear, comfy_linear: nn.Linear):
+    if hasattr(comfy_linear, "comfy_cast_weights"):
+        svdq_linear.comfy_cast_weights = comfy_linear.comfy_cast_weights
+        svdq_linear.weight = None
+
+
 def fuse_to_svdquant_linear(comfy_linear1: nn.Linear, comfy_linear2: nn.Linear, **kwargs) -> SVDQW4A4Linear:
     """
     Fuse two linear modules into one SVDQW4A4Linear.
@@ -45,7 +51,7 @@ def fuse_to_svdquant_linear(comfy_linear1: nn.Linear, comfy_linear2: nn.Linear, 
     assert comfy_linear1.in_features == comfy_linear2.in_features
     assert comfy_linear1.bias is None and comfy_linear2.bias is None
     torch_dtype = kwargs.pop("torch_dtype", comfy_linear1.weight.dtype)
-    return SVDQW4A4Linear(
+    svdq_linear = SVDQW4A4Linear(
         comfy_linear1.in_features,
         comfy_linear1.out_features + comfy_linear2.out_features,
         bias=False,
@@ -53,6 +59,8 @@ def fuse_to_svdquant_linear(comfy_linear1: nn.Linear, comfy_linear2: nn.Linear, 
         device=comfy_linear1.weight.device,
         **kwargs,
     )
+    add_comfy_cast_weights_attr(svdq_linear, comfy_linear1)
+    return svdq_linear
 
 
 def fused_qkv_norm_rotary(
@@ -114,7 +122,9 @@ class ComfyNunchakuZImageAttention(JointAttention):
         self.head_dim = orig_attn.head_dim
 
         self.qkv = SVDQW4A4Linear.from_linear(orig_attn.qkv, **kwargs)
+        add_comfy_cast_weights_attr(self.qkv, orig_attn.qkv)
         self.out = SVDQW4A4Linear.from_linear(orig_attn.out, **kwargs)
+        add_comfy_cast_weights_attr(self.out, orig_attn.out)
 
         self.q_norm = orig_attn.q_norm
         self.k_norm = orig_attn.k_norm
@@ -180,6 +190,7 @@ class ComfyNunchakuZImageFeedForward(nn.Module):
         super().__init__()
         self.w13 = fuse_to_svdquant_linear(orig_ff.w1, orig_ff.w3, **kwargs)
         self.w2 = SVDQW4A4Linear.from_linear(orig_ff.w2, **kwargs)
+        add_comfy_cast_weights_attr(self.w2, orig_ff.w2)
 
     def _forward_silu_gating(self, x1, x3):
         return clamp_fp16(F.silu(x1) * x3)
