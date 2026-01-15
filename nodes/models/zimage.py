@@ -125,9 +125,6 @@ def _load(sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}):
     if len(temp_sd) > 0:
         sd = temp_sd
 
-    parameters = comfy.utils.calculate_parameters(sd)
-    weight_dtype = comfy.utils.weight_dtype(sd)
-
     load_device = model_management.get_torch_device()
     offload_device = model_management.unet_offload_device()
     check_hardware_compatibility(quantization_config, load_device)
@@ -137,13 +134,8 @@ def _load(sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}):
     model_config = NunchakuZImage(rank=rank, precision=precision, skip_refiners=skip_refiners)
 
     if not is_turing():
-        unet_weight_dtype = list(model_config.supported_inference_dtypes)
-        unet_dtype = model_management.unet_dtype(
-            model_params=parameters, supported_dtypes=unet_weight_dtype, weight_dtype=weight_dtype
-        )
-        manual_cast_dtype = model_management.unet_manual_cast(
-            unet_dtype, load_device, model_config.supported_inference_dtypes
-        )
+        unet_dtype = torch.bfloat16
+        manual_cast_dtype = None
         torch_dtype = torch.bfloat16
     else:
         unet_dtype = torch.bfloat16
