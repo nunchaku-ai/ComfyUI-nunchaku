@@ -25,6 +25,15 @@ from nunchaku.utils import pad_tensor
 
 
 def add_comfy_cast_weights_attr(svdq_linear: SVDQW4A4Linear, comfy_linear: nn.Linear):
+    """
+    Add dummy `comfy_cast_weights` and `weight`fields to a SVDQW4A4Linear module.
+
+    Make it compatible with offloading mechanism in ModelPatcher class in a lower vram condition.
+
+    Note
+    ----
+    See method `comfy.model_patcher.ModelPatcher#_load_list` and method `comfy.model_patcher.ModelPatcher#load`
+    """
     if hasattr(comfy_linear, "comfy_cast_weights"):
         svdq_linear.comfy_cast_weights = comfy_linear.comfy_cast_weights
         svdq_linear.weight = None
