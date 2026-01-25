@@ -401,7 +401,9 @@ class NunchakuQwenImageTransformerBlock(nn.Module):
             **kwargs,
         )
 
-    def _modulate(self, x: torch.Tensor, mod_params: torch.Tensor, timestep_zero_index=None) -> Tuple[torch.Tensor, torch.Tensor]:
+    def _modulate(
+        self, x: torch.Tensor, mod_params: torch.Tensor, timestep_zero_index=None
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Apply modulation to input tensor.
 
@@ -412,8 +414,8 @@ class NunchakuQwenImageTransformerBlock(nn.Module):
         mod_params : torch.Tensor
             Modulation parameters of shape (batch, 3*dim).
         timestep_zero_index : int, optional
-            The sequence index used to split the input tensor for dual-timestep modulation 
-            (e.g., normal vs. zero timestep). If provided, different modulation parameters 
+            The sequence index used to split the input tensor for dual-timestep modulation
+            (e.g., normal vs. zero timestep). If provided, different modulation parameters
             are applied to the segments before and after this index.
 
         Returns
@@ -421,11 +423,11 @@ class NunchakuQwenImageTransformerBlock(nn.Module):
         modulated_x : torch.Tensor
             Modulated tensor.
         gate : torch.Tensor or tuple of torch.Tensor
-            Gate tensor for residual connection. Returns a tuple of gates if 
+            Gate tensor for residual connection. Returns a tuple of gates if
             timestep_zero_index is provided.
         """
         shift, scale, gate = mod_params.chunk(3, dim=-1)
-        
+
         if timestep_zero_index is not None:
             # Handle index_timestep_zero logic
             actual_batch = shift.size(0) // 2
@@ -433,11 +435,11 @@ class NunchakuQwenImageTransformerBlock(nn.Module):
             shift, shift_0 = shift[:actual_batch], shift[actual_batch:]
             scale, scale_0 = scale[:actual_batch], scale[actual_batch:]
             gate, gate_0 = gate[:actual_batch], gate[actual_batch:]
-            
+
             # Apply separately to different parts of the sequence
             reg = x[:, :timestep_zero_index] * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
             zero = x[:, timestep_zero_index:] * (1 + scale_0.unsqueeze(1)) + shift_0.unsqueeze(1)
-            
+
             return torch.cat((reg, zero), dim=1), (gate.unsqueeze(1), gate_0.unsqueeze(1))
 
         if self.scale_shift != 0:
@@ -470,7 +472,7 @@ class NunchakuQwenImageTransformerBlock(nn.Module):
             Rotary positional embeddings.
         timestep_zero_index : int, optional
             The sequence index used to split the image stream for dual-timestep modulation.
-            If provided, handles the special logic where a portion of the sequence 
+            If provided, handles the special logic where a portion of the sequence
             (e.g., reference latents) is conditioned with a zero timestep.
 
         Returns
@@ -482,7 +484,7 @@ class NunchakuQwenImageTransformerBlock(nn.Module):
         """
         # Get modulation parameters for both streams
         img_mod_params = self.img_mod(temb)  # [B, 6*dim]
-        
+
         # Process temb for the text side (text does not require zero index splitting)
         txt_temb = temb
         if timestep_zero_index is not None:
@@ -518,33 +520,39 @@ class NunchakuQwenImageTransformerBlock(nn.Module):
 
         # QwenAttnProcessor2_0 returns (img_output, txt_output) when encoder_hidden_states is provided
         img_attn_output, txt_attn_output = attn_output
-        
+
         # Residual connection and gate processing
         if timestep_zero_index is not None:
             # Handle concatenation for split gates
-            hidden_states = hidden_states + torch.cat([
-                img_attn_output[:, :timestep_zero_index] * img_gate1[0],
-                img_attn_output[:, timestep_zero_index:] * img_gate1[1]
-            ], dim=1)
+            hidden_states = hidden_states + torch.cat(
+                [
+                    img_attn_output[:, :timestep_zero_index] * img_gate1[0],
+                    img_attn_output[:, timestep_zero_index:] * img_gate1[1],
+                ],
+                dim=1,
+            )
         else:
             # Apply attention gates and add residual (like in Megatron)
             hidden_states = hidden_states + img_gate1 * img_attn_output
-            
+
         encoder_hidden_states = encoder_hidden_states + txt_gate1 * txt_attn_output
 
         # Process image stream - norm2 + MLP
         img_normed2 = self.img_norm2(hidden_states)
         img_modulated2, img_gate2 = self._modulate(img_normed2, img_mod2, timestep_zero_index)
         img_mlp_output = self.img_mlp(img_modulated2)
-        
+
         if timestep_zero_index is not None:
-            hidden_states = hidden_states + torch.cat([
-                img_mlp_output[:, :timestep_zero_index] * img_gate2[0],
-                img_mlp_output[:, timestep_zero_index:] * img_gate2[1]
-            ], dim=1)
+            hidden_states = hidden_states + torch.cat(
+                [
+                    img_mlp_output[:, :timestep_zero_index] * img_gate2[0],
+                    img_mlp_output[:, timestep_zero_index:] * img_gate2[1],
+                ],
+                dim=1,
+            )
         else:
             hidden_states = hidden_states + img_gate2 * img_mlp_output
-            
+
         # Process text stream - norm2 + MLP
         txt_normed2 = self.txt_norm2(encoder_hidden_states)
         txt_modulated2, txt_gate2 = self._modulate(txt_normed2, txt_mod2)
@@ -851,7 +859,7 @@ class NunchakuQwenImageTransformer2DModel(NunchakuModelMixin, QwenImageTransform
 
             if self.offload:
                 self.offload_manager.step(compute_stream)
-                
+
         # Process final normalization
         if timestep_zero_index is not None:
             temb = temb.chunk(2, dim=0)[0]
