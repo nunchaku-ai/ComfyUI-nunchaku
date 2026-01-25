@@ -143,18 +143,6 @@ class NunchakuQwenImageDiTLoader:
                 ),
             },
             "optional": {
-                "num_blocks_on_gpu": (
-                    "INT",
-                    {
-                        "default": 1,
-                        "min": 1,
-                        "max": 60,
-                        "tooltip": (
-                            "When CPU offload is enabled, this option determines how many transformer blocks remain on GPU memory. "
-                            "Increasing this value decreases CPU RAM usage but increases GPU memory usage."
-                        ),
-                    },
-                ),
                 "use_pin_memory": (
                     ["enable", "disable"],
                     {
@@ -173,9 +161,7 @@ class NunchakuQwenImageDiTLoader:
     CATEGORY = "Nunchaku"
     TITLE = "Nunchaku Qwen-Image DiT Loader"
 
-    def load_model(
-        self, model_name: str, cpu_offload: str, num_blocks_on_gpu: int = 1, use_pin_memory: str = "disable", **kwargs
-    ):
+    def load_model(self, model_name: str, cpu_offload: str, use_pin_memory: str = "disable", **kwargs):
         """
         Load the Qwen-Image model from file and return a patched model.
 
@@ -185,8 +171,6 @@ class NunchakuQwenImageDiTLoader:
             The filename of the Qwen-Image model to load.
         cpu_offload : str
             Whether to enable CPU offload for the transformer model.
-        num_blocks_on_gpu : int
-            The number of transformer blocks to keep on GPU when CPU offload is enabled.
         use_pin_memory : str
             Whether to use pinned memory for the transformer blocks when CPU offload is enabled.
 
@@ -219,6 +203,58 @@ class NunchakuQwenImageDiTLoader:
 
         if cpu_offload_enabled:
             assert use_pin_memory in ["enable", "disable"], "Invalid use_pin_memory option"
+
+            # Calculate optimal number of blocks based on available free VRAM
+            # This follows ComfyUI's approach of calculating based on actual available memory
+            device = model_management.get_torch_device()
+            free_memory = model_management.get_free_memory(device)
+
+            # Get the transformer blocks to estimate per-block memory usage
+            transformer_blocks = model.model.diffusion_model.transformer_blocks
+            total_blocks = len(transformer_blocks)
+
+            # Estimate memory per block by calculating the size of one block
+            # We use the first block as a representative sample
+            if total_blocks > 0:
+                single_block_memory = model_management.module_size(transformer_blocks[0])
+            else:
+                # Fallback if no blocks (shouldn't happen)
+                single_block_memory = 100 * 1024 * 1024  # 100MB estimate
+
+            # Calculate memory used by non-block components (img_in, txt_in, norm_out, etc.)
+            # These stay on GPU even with offloading
+            non_block_modules = [
+                model.model.diffusion_model.img_in,
+                model.model.diffusion_model.txt_in,
+                model.model.diffusion_model.txt_norm,
+                model.model.diffusion_model.time_text_embed,
+                model.model.diffusion_model.norm_out,
+                model.model.diffusion_model.proj_out,
+            ]
+            non_block_memory = sum(model_management.module_size(m) for m in non_block_modules)
+
+            # Reserve memory for:
+            # 1. Inference operations (activations, etc.) - ComfyUI's minimum_inference_memory()
+            # 2. Non-block components that stay on GPU
+            # 3. Safety margin for peak memory usage during block transfers
+            inference_overhead = model_management.minimum_inference_memory()
+            reserved_memory = inference_overhead + non_block_memory
+
+            # Calculate how many blocks can fit in available VRAM
+            # Use 80% of remaining memory for extra safety (offloading has overhead)
+            usable_memory = max(0, free_memory - reserved_memory) * 0.8
+            max_blocks_that_fit = int(usable_memory / single_block_memory)
+
+            # Clamp to reasonable range: at least 1, at most total_blocks
+            num_blocks_on_gpu = max(1, min(max_blocks_that_fit, total_blocks))
+
+            logger.info(
+                f"Free VRAM: {free_memory / (1024**3):.2f}GB, "
+                f"Non-block memory: {non_block_memory / (1024**2):.1f}MB, "
+                f"Block size: {single_block_memory / (1024**2):.1f}MB, "
+                f"Keeping {num_blocks_on_gpu}/{total_blocks} blocks on GPU"
+            )
+
             model.model.diffusion_model.set_offload(
                 cpu_offload_enabled, num_blocks_on_gpu=num_blocks_on_gpu, use_pin_memory=use_pin_memory == "enable"
             )
