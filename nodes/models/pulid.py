@@ -136,6 +136,12 @@ class NunchakuFluxPuLIDApplyV2:
         model_wrapper = model.model.diffusion_model
         assert isinstance(model_wrapper, ComfyFluxWrapper)
 
+        model_wrapper.model = None
+        ret_model = model.clone()  # copy everything except the model, Replace deepcopy with clone and adapt to ModelPatcher
+        ret_model_wrapper = ret_model.model.diffusion_model
+        assert isinstance(ret_model_wrapper, ComfyFluxWrapper)
+        ret_model_wrapper.model = transformer
+        model_wrapper.model = transformer
         ret_model_wrapper, ret_model = copy_with_ctx(model_wrapper)
 
         ret_model_wrapper.pulid_pipeline = pulid_pipline
