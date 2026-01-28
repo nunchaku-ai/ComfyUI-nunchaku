@@ -144,8 +144,23 @@ def _load(sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}):
     logging.info(f"unet_dtype: {unet_dtype}, manual_cast_dtype: {manual_cast_dtype}, svdq_linear_dtype: {torch_dtype}")
     model_config.set_inference_dtype(unet_dtype, manual_cast_dtype)
 
+    if torch.cuda.is_available() and torch.cuda.is_bf16_supported() and unet_dtype == torch.float16:
+        unet_dtype = torch.bfloat16
+        manual_cast_dtype = None
+
     patched_sd = _patch_state_dict(new_sd)
     model = model_config.get_model(patched_sd, "", torch_dtype=torch_dtype)
+
+    model_sd = model.diffusion_model.state_dict()
+    for key, model_value in model_sd.items():
+        if key in patched_sd:
+            ckpt_value = patched_sd[key]
+            if torch.is_tensor(ckpt_value) and torch.is_tensor(model_value):
+                if ckpt_value.is_floating_point() and ckpt_value.dtype != model_value.dtype:
+                    cast_value = ckpt_value.to(dtype=model_value.dtype)
+                    if model_value.dtype == torch.float16:
+                        cast_value = torch.nan_to_num(cast_value, nan=0.0, posinf=65504, neginf=-65504)
+                    patched_sd[key] = cast_value
 
     patch_scale_key(model.diffusion_model, patched_sd)
     if torch_dtype == torch.float16:
