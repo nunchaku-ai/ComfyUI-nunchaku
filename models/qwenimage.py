@@ -316,8 +316,8 @@ class Attention(nn.Module):
         )
 
         # Split results back to separate streams
-        txt_attn_output = joint_hidden_states[:, :seq_txt, :]
-        img_attn_output = joint_hidden_states[:, seq_txt:, :]
+        txt_attn_output = joint_hidden_states[:, :seq_txt, :].contiguous()
+        img_attn_output = joint_hidden_states[:, seq_txt:, :].contiguous()
 
         img_attn_output = self.to_out[0](img_attn_output)
         img_attn_output = self.to_out[1](img_attn_output)
