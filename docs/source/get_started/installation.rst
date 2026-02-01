@@ -155,3 +155,46 @@ To run ComfyUI, execute the following from your workspace directory:
 .. code-block:: shell
 
    uv run comfyui
+
+Option 4: Build Your Own Portable Version (Windows Only)
+--------------------------------------------------------
+
+We support Windows Portable for an easy Nunchaku build.
+
+
+**Build Steps**
+
+1. Clone or download the ``portable_windows`` folder from the repository.
+
+2. Open Command Prompt and navigate to your desired working directory:
+
+   .. code-block:: shell
+
+      cd C:\your\working\directory
+
+3. Run the build script:
+
+   .. code-block:: shell
+
+      path\to\portable_windows\build_portable.cmd
+
+4. Follow the interactive prompts to select:
+
+   - **CUDA version**: Choose between CUDA 12.6 (cu126) or CUDA 12.8 (cu128, recommended)
+   - **Nunchaku version**: Choose from available versions (v1.0.2 stable, v1.1.0, or v1.2.0 latest)
+
+5. Once complete, the portable build will be created in ``ComfyUI_nunchaku_portable`` folder.
+
+**Running the Portable Build**
+
+Navigate to the ``ComfyUI_nunchaku_portable`` folder and run:
+
+.. code-block:: shell
+
+   run_nvidia_gpu.bat
+
+.. note::
+
+   If ComfyUI fails to start, try updating your NVIDIA drivers to the latest version.
+   If you encounter a ``c10.dll`` error, install the Visual C++ Redistributable from
+   `Microsoft <https://aka.ms/vs/17/release/vc_redist.x64.exe>`_.
