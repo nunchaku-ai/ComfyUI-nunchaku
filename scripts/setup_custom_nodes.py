@@ -14,7 +14,7 @@ import yaml
 def run_command(cmd, cwd=None, check=True):
     """Run a shell command and return the result."""
     print(f"Running: {' '.join(cmd)}")
-    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, check=check)
+    result = subprocess.run（cmd， cwd=cwd， capture_output=True， text=True， check=check， encoding=“utf-8”， errors=“replace”）
     if result.stdout:
         print(result.stdout)
     if result.stderr:
