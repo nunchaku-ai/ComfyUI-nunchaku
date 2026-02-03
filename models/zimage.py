@@ -227,6 +227,7 @@ class RopeFuseAttentionHook:
         from the original `freqs_cis` and cache it in the  `packed_freqs_cis_cache` dict.
         """
         new_input_args = list(input_args)
+        x: torch.Tensor = new_input_args[0]
         freqs_cis: torch.Tensor = new_input_args[2]
         if freqs_cis is None:
             return None
@@ -237,6 +238,9 @@ class RopeFuseAttentionHook:
             # freqs_cis shape example: torch.Size([1, 4160, 1, 64, 2, 2])
             # freqs_cis dtype: torch.float32
             freqs_cis = freqs_cis[..., [1], :].squeeze(2)  # See comfy.ldm.flux.math#rope, #apply_rope
+            freqs_cis = freqs_cis.expand(x.shape[0], -1, -1, -1, -1)  # [b, s, 64, 1, 2]
+            freqs_cis = freqs_cis.flatten(0, 1)  # [b*s, 64, 1, 2]
+            freqs_cis = freqs_cis.unsqueeze(0)  # [1, b*s, 64, 1, 2]
             packed_freqs_cis = pack_rotemb(pad_tensor(freqs_cis, 256, 1))
             self.packed_freqs_cis_cache[cache_key] = packed_freqs_cis
             logging.debug(
