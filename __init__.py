@@ -5,6 +5,38 @@ from pathlib import Path
 import torch
 import yaml
 from packaging.version import InvalidVersion, Version
+# --- ComfyUI compatibility hotfix for Flux init (Fix #801-like breakage) ---
+def _nunchaku_patch_comfy_flux_init():
+    try:
+        import torch
+        import comfy.model_base as model_base
+    except Exception:
+        return
+
+    def _patch(cls):
+        if cls is None:
+            return
+        if getattr(cls, "_nunchaku_dm_hotfix", False):
+            return
+
+        orig_init = cls.__init__
+
+        def patched_init(self, *args, __orig_init=orig_init, **kwargs):
+            # IMPORTANT:
+            # Do NOT use hasattr/getattr here (nn.Module isn't fully initialized yet).
+            # Put a temporary instance attribute in __dict__ so BaseModel init won't crash.
+            if "diffusion_model" not in self.__dict__:
+                self.__dict__["diffusion_model"] = torch.nn.Identity()
+            return __orig_init(self, *args, **kwargs)
+
+        cls.__init__ = patched_init
+        cls._nunchaku_dm_hotfix = True
+
+    _patch(getattr(model_base, "Flux", None))
+    _patch(getattr(model_base, "FluxSchnell", None))
+
+_nunchaku_patch_comfy_flux_init()
+# --- end hotfix ---
 
 # vanilla and LTS compatibility snippet
 try:
@@ -139,6 +171,13 @@ try:
     NODE_CLASS_MAPPINGS["NunchakuIPAdapterLoader"] = NunchakuIPAdapterLoader
 except ImportError:
     logger.exception("Nodes `NunchakuFluxIPAdapterApply` and `NunchakuIPAdapterLoader` import failed:")
+
+try:
+    from .nodes.models.zimage import NunchakuZImageDiTLoader
+
+    NODE_CLASS_MAPPINGS["NunchakuZImageDiTLoader"] = NunchakuZImageDiTLoader
+except ImportError:
+    logger.exception("Nodes `NunchakuZImageDiTLoader` import failed:")
 
 try:
     from .nodes.tools.merge_safetensors import NunchakuModelMerger
