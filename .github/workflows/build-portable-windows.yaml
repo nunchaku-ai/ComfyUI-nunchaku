@@ -1,0 +1,125 @@
+name: Build Portable Windows Release
+on:
+  workflow_dispatch:
+    inputs:
+      nunchaku_version:
+        description: 'Nunchaku version (e.g., 1.2.0)'
+        required: true
+        default: '1.2.0'
+      release_tag:
+        description: 'Release tag (e.g., v1.2.0-portable)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-portable:
+    name: Build Windows Portable Package
+    runs-on: windows-latest
+    steps:
+      - name: Checkout ComfyUI-nunchaku
+        uses: actions/checkout@v4
+        with:
+          path: ComfyUI-nunchaku
+
+      - name: Set build variables
+        id: vars
+        shell: pwsh
+        run: |
+          $nunchaku_version = "${{ github.event.inputs.nunchaku_version }}"
+          $release_tag = "${{ github.event.inputs.release_tag }}"
+
+          # Use defaults for push events
+          if ([string]::IsNullOrEmpty($nunchaku_version)) { $nunchaku_version = "1.2.0" }
+          if ([string]::IsNullOrEmpty($release_tag)) { $release_tag = "v1.2.0-portable-test" }
+
+          echo "nunchaku_version=$nunchaku_version" >> $env:GITHUB_OUTPUT
+          echo "release_tag=$release_tag" >> $env:GITHUB_OUTPUT
+
+      - name: Build portable package
+        shell: cmd
+        working-directory: ComfyUI-nunchaku/.github/portable_windows
+        env:
+          CI_BUILD: '1'
+          NUNCHAKU_VERSION: ${{ steps.vars.outputs.nunchaku_version }}
+        run: |
+          call build_portable.cmd
+
+      - name: Create portable archive
+        shell: pwsh
+        run: |
+          $version = "${{ steps.vars.outputs.nunchaku_version }}"
+          $archiveName = "ComfyUI_nunchaku_portable_v${version}.zip"
+
+          Write-Host "Creating archive: $archiveName"
+          Compress-Archive -Path "ComfyUI-nunchaku\.github\portable_windows\ComfyUI_nunchaku_portable\*" -DestinationPath $archiveName -CompressionLevel Optimal
+
+          Write-Host "Archive created successfully"
+          $sizeMB = (Get-Item $archiveName).Length / 1MB
+          Write-Host "Archive size: $([math]::Round($sizeMB, 2)) MB"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.release_tag }}
+          name: ComfyUI-nunchaku Portable ${{ steps.vars.outputs.release_tag }}
+          body: |
+            ## ComfyUI-nunchaku Portable Release
+
+            **This is a portable package that requires initial setup.**
+
+            ### Configuration:
+            - Nunchaku version: v${{ steps.vars.outputs.nunchaku_version }}
+            - Python version: 3.11.11
+            - PyTorch version: 2.9.1+cu128
+            - Package size: ~50-100 MB
+            - Installation downloads: ~2 GB additional
+
+            ### Installation:
+            1. Download the portable package below
+            2. Extract the archive to your desired location
+            3. **Run `install.bat`** to download and install all dependencies
+               - Internet connection required
+               - Takes about 10-15 minutes
+               - Downloads Python, PyTorch, and Nunchaku automatically
+            4. After installation completes, run `run.bat` to start ComfyUI
+
+            ### Subsequent Usage:
+            - Simply run `run.bat` to start ComfyUI
+
+            ### System Requirements:
+            - Windows 10/11
+            - NVIDIA GPU with CUDA support (RTX 20/30/40 series recommended)
+            - Latest NVIDIA drivers
+            - ~3 GB free disk space (after installation)
+            - Internet connection (for initial setup only)
+
+            ### Advantages of Package:
+            - Small download size (~50-100 MB vs 2+ GB)
+            - Easy updates (just re-download and extract)
+            - Automatic dependency installation
+            - Same performance as full package
+
+            ### Troubleshooting:
+            - If installation fails, check your internet connection and try again
+            - For c10.dll errors, install Visual C++ Redistributable: https://aka.ms/vc14/vc_redist.x64.exe
+            - For other issues, visit: https://github.com/nunchaku-ai/ComfyUI-nunchaku/issues
+
+            **Note:** This package automatically installs all dependencies on first run!
+          files: |
+            ComfyUI_nunchaku_portable_v${{ steps.vars.outputs.nunchaku_version }}.zip
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: portable-build-files
+          path: |
+            ComfyUI-nunchaku/.github/portable_windows/ComfyUI_nunchaku_portable/README.txt
+            ComfyUI-nunchaku/.github/portable_windows/ComfyUI_nunchaku_portable/config.txt
+          retention-days: 30
