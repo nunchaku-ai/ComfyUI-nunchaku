@@ -9,6 +9,12 @@ on:
       release_tag:
         description: 'Release tag (e.g., v1.2.0-portable)'
         required: true
+  push:
+    branches:
+      - feature/protable_windows
+    paths:
+      - '.github/workflows/build-portable-windows.yaml'
+      - '.github/portable_windows/**'
 
 permissions:
   contents: write
